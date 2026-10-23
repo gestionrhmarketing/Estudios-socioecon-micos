@@ -32,11 +32,7 @@ import {
   File,
   Loader2,
 } from "lucide-react";
-import {
-  getCatalogoEvaluadores,
-  registrarNuevoEvaluador,
-  subirArchivoExpediente,
-} from "@/lib/storage";
+import { subirArchivoExpediente } from "@/lib/storage";
 
 interface Props {
   estudio: EstudioSocioeconomico;
@@ -63,14 +59,7 @@ export function EstudioFormWizard({
 }: Props) {
   const [activeStep, setActiveStep] = useState(0);
   const [activeEmpresaTab, setActiveEmpresaTab] = useState<0 | 1 | 2>(0);
-  const [catalogoEvaluadores, setCatalogoEvaluadores] = useState<string[]>([]);
-  const [nuevoEvaluadorInput, setNuevoEvaluadorInput] = useState("");
-  const [mostrandoAgregar, setMostrandoAgregar] = useState(false);
   const [subiendoDocId, setSubiendoDocId] = useState<number | null>(null);
-
-  React.useEffect(() => {
-    setCatalogoEvaluadores(getCatalogoEvaluadores());
-  }, []);
 
   // Compresión ultraligera de imágenes:
   // Una foto de celular de 8MB-12MB se comprime a ~70KB-90KB con nitidez perfecta para hoja tamaño Carta.
@@ -208,98 +197,6 @@ export function EstudioFormWizard({
         =================================================================== */}
         {activeStep === 0 && (
           <div className="space-y-6">
-            {/* Barra interna de Evaluador / Capturista con Catálogo Inteligente (NO se imprime en PDF) */}
-            <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                <span className="text-xs font-bold text-amber-900">
-                  Control interno de equipo (solo visible en Dashboard):
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                <label className="text-xs font-semibold text-amber-800 whitespace-nowrap">
-                  Capturado por:
-                </label>
-
-                {!mostrandoAgregar ? (
-                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                    <select
-                      value={estudio.evaluadorNombre || ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "__NUEVO__") {
-                          setMostrandoAgregar(true);
-                        } else {
-                          onChange({ ...estudio, evaluadorNombre: val });
-                          if (val) registrarNuevoEvaluador(val);
-                        }
-                      }}
-                      className="bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-800 focus:outline-none focus:border-amber-600 min-w-[190px]"
-                    >
-                      <option value="">-- Selecciona evaluador --</option>
-                      {catalogoEvaluadores.map((nombre) => (
-                        <option key={nombre} value={nombre}>
-                          {nombre}
-                        </option>
-                      ))}
-                      {estudio.evaluadorNombre &&
-                        !catalogoEvaluadores.includes(estudio.evaluadorNombre) && (
-                          <option value={estudio.evaluadorNombre}>
-                            {estudio.evaluadorNombre}
-                          </option>
-                        )}
-                      <option value="__NUEVO__" className="text-[#E31E24] font-bold">
-                        + Registrar nuevo nombre...
-                      </option>
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => setMostrandoAgregar(true)}
-                      className="p-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold"
-                      title="Agregar nuevo nombre al catálogo"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={nuevoEvaluadorInput}
-                      onChange={(e) => setNuevoEvaluadorInput(e.target.value)}
-                      placeholder="Escribe tu nombre exacto"
-                      className="bg-white border border-amber-400 rounded-lg px-2.5 py-1 text-xs font-bold text-gray-800 focus:outline-none w-48"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (nuevoEvaluadorInput.trim()) {
-                          const nuevo = nuevoEvaluadorInput.trim();
-                          const actualizado = registrarNuevoEvaluador(nuevo);
-                          setCatalogoEvaluadores(actualizado);
-                          onChange({ ...estudio, evaluadorNombre: nuevo });
-                          setNuevoEvaluadorInput("");
-                        }
-                        setMostrandoAgregar(false);
-                      }}
-                      className="px-2.5 py-1 rounded bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700"
-                    >
-                      Guardar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMostrandoAgregar(false)}
-                      className="px-2 py-1 rounded bg-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-300"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">

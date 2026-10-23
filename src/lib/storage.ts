@@ -6,30 +6,33 @@ const SUPABASE_CONFIG_KEY = "gestionrh_supabase_config_v1";
 const EVALUADORES_KEY = "gestionrh_evaluadores_catalog_v1";
 export const BUCKET_EXPEDIENTES = "expedientes";
 
-const EVALUADORES_DEFAULT = [
-  "Lic. Claudia Morales",
-  "Abrahán García",
-  "Lic. Andrea Romero",
-  "Lic. Roberto Sánchez",
-];
+const EVALUADORES_DEFAULT: string[] = [];
 
 export function getCatalogoEvaluadores(): string[] {
-  // 1. Obtener lista base de defaults + guardados
-  let list = [...EVALUADORES_DEFAULT];
+  let list: string[] = [];
   if (typeof window !== "undefined") {
     try {
       const raw = localStorage.getItem(EVALUADORES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          list = Array.from(new Set([...list, ...parsed]));
+          const mocks = [
+            "lic. claudia morales",
+            "abrahán garcía",
+            "abraham garcia",
+            "lic. andrea romero",
+            "lic. roberto sánchez",
+            "lic. roberto sanchez",
+          ];
+          list = parsed.filter(
+            (p) => !mocks.includes(String(p).trim().toLowerCase())
+          );
         }
       }
     } catch {
       // ignore
     }
 
-    // 2. Extraer dinámicamente cualquier evaluador que exista en los estudios guardados
     try {
       const localEstudios = getLocalEstudios();
       localEstudios.forEach((est) => {
