@@ -14,6 +14,7 @@ import {
   eliminarEstudio,
   getCatalogoEvaluadores,
   registrarNuevoEvaluador,
+  suscribirEstudiosRealtime,
 } from "@/lib/storage";
 import { LogoGestionRH } from "@/components/pdf/BrandGraphics";
 import dynamic from "next/dynamic";
@@ -137,6 +138,53 @@ export default function HomePage() {
 
   useEffect(() => {
     cargarDatos();
+
+    // 1. Suscripción en Tiempo Real con WebSockets de Supabase:
+    // Si cualquier dispositivo agrega, actualiza o borra un estudio,
+    // se refleja en todos los demás teléfonos y PCs en menos de 100ms.
+    const desuscribir = suscribirEstudiosRealtime((evento) => {
+      if (evento.tipo === "DELETE" && evento.idEliminado) {
+        const idDel = evento.idEliminado;
+        setEstudios((prev) => prev.filter((e) => e.id !== idDel));
+      } else if (evento.tipo === "INSERT" && evento.estudio) {
+        const nuevo = evento.estudio;
+        setEstudios((prev) => {
+          if (prev.some((e) => e.id === nuevo.id)) return prev;
+          return [nuevo, ...prev];
+        });
+      } else if (evento.tipo === "UPDATE" && evento.estudio) {
+        const actualizado = evento.estudio;
+        setEstudios((prev) => {
+          const idx = prev.findIndex((e) => e.id === actualizado.id);
+          if (idx >= 0) {
+            const copia = [...prev];
+            copia[idx] = actualizado;
+            return copia;
+          }
+          return [actualizado, ...prev];
+        });
+      }
+    });
+
+    // 2. Re-sincronización automática cuando el usuario desbloquea el teléfono o vuelve a la pestaña
+    const handleReactivar = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        cargarDatos(true);
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      document.addEventListener("visibilitychange", handleReactivar);
+      window.addEventListener("focus", handleReactivar);
+    }
+
+    return () => {
+      if (desuscribir) desuscribir();
+      if (typeof window !== "undefined") {
+        document.removeEventListener("visibilitychange", handleReactivar);
+        window.removeEventListener("focus", handleReactivar);
+      }
+    };
   }, [cargarDatos]);
 
   // Autoguardado optimizado en segundo plano (Borrador local para no perder datos si se cierra la app)

@@ -29,3 +29,10 @@ create policy "Permitir acceso completo a estudios_socioeconomicos"
   for all
   using (true)
   with check (true);
+
+-- ============================================================================
+-- ACTIVAR TRANSMISIÓN EN TIEMPO REAL (REALTIME WEBSOCKETS)
+-- Permite que 5 computadoras y 5 celulares vean altas, bajas y cambios en vivo
+-- ============================================================================
+alter table public.estudios_socioeconomicos replica identity full;
+alter publication supabase_realtime add table public.estudios_socioeconomicos;

@@ -433,3 +433,60 @@ export async function subirArchivoExpediente(
     return { url: "", error: msg };
   }
 }
+
+/**
+ * Suscripción en Tiempo Real (WebSockets de Supabase):
+ * Cuando cualquier computadora o celular agregue, modifique o elimine un estudio,
+ * todos los demás teléfonos y computadoras conectados reciben el cambio en milisegundos
+ * sin necesidad de recargar la página.
+ */
+export function suscribirEstudiosRealtime(
+  onEvento: (evento: {
+    tipo: "INSERT" | "UPDATE" | "DELETE";
+    estudio?: EstudioSocioeconomico;
+    idEliminado?: string;
+  }) => void
+): () => void {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel("estudios_realtime_broadcast")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "estudios_socioeconomicos",
+        },
+        (payload) => {
+          invalidarCacheLectura();
+          if (payload.eventType === "INSERT") {
+            const raw = (payload.new as { data?: EstudioSocioeconomico })?.data;
+            if (raw) {
+              onEvento({ tipo: "INSERT", estudio: raw });
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const raw = (payload.new as { data?: EstudioSocioeconomico })?.data;
+            if (raw) {
+              onEvento({ tipo: "UPDATE", estudio: raw });
+            }
+          } else if (payload.eventType === "DELETE") {
+            const idEliminado = (payload.old as { id?: string })?.id;
+            if (idEliminado) {
+              onEvento({ tipo: "DELETE", idEliminado });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.error("Error al suscribirse a Realtime:", err);
+    return () => {};
+  }
+}
