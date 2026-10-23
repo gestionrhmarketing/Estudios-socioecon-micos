@@ -1,52 +1,14 @@
 import React from "react";
 
-export function LogoGestionRH({ className = "h-12" }: { className?: string }) {
+export function LogoGestionRH({ className = "h-11" }: { className?: string }) {
   return (
-    <div className={`inline-flex items-center gap-2.5 select-none ${className}`}>
-      {/* Esfera estilizada con líneas de onda */}
-      <svg
-        viewBox="0 0 64 64"
-        className="h-10 w-10 shrink-0"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <circle cx="32" cy="32" r="28" fill="#8C8D90" />
-        <path
-          d="M6 26C18 22 30 28 44 42C50 48 54 50 58 50"
-          stroke="white"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M4 34C16 30 28 36 42 50C46 54 50 56 54 56"
-          stroke="white"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-        />
-        <path
-          d="M8 42C18 39 28 44 38 56"
-          stroke="white"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <path
-          d="M14 50C21 48 27 52 33 59"
-          stroke="white"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="flex flex-col leading-none">
-        <div className="flex items-baseline tracking-tight text-[24px]">
-          <span className="font-light text-[#6D6E71]">Gestión</span>
-          <span className="font-bold text-[#E31E24] ml-1">rh</span>
-          <span className="text-[#8C8D90] text-xs ml-0.5">.</span>
-        </div>
-        <div className="w-full h-[1.5px] bg-[#8C8D90] my-0.5" />
-        <span className="text-[7.5px] tracking-[0.22em] text-[#6D6E71] font-medium uppercase text-right">
-          SOLUCIÓN INTEGRAL
-        </span>
-      </div>
+    <div className={`inline-flex items-center select-none ${className}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logo-gestionrh.jpg"
+        alt="Gestión rh - Solución Integral"
+        className="h-full w-auto object-contain max-h-[50px]"
+      />
     </div>
   );
 }

@@ -413,56 +413,31 @@ export default function HomePage() {
             )}
             <div
               onClick={() => setViewMode("dashboard")}
-              className="cursor-pointer"
+              className="cursor-pointer flex items-center gap-2.5"
             >
-              <LogoGestionRH />
+              <LogoGestionRH className="h-10" />
+              <button
+                type="button"
+                onDoubleClick={() => setIsConfigOpen(true)}
+                title="Versión 1.0.4"
+                className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 border border-gray-200 px-2 py-0.5 rounded-md tracking-wider transition select-none"
+              >
+                v1.0.4
+              </button>
             </div>
           </div>
 
           {/* Controles contextuales según la vista */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Indicador Supabase / Local */}
-            <button
-              type="button"
-              onClick={() => setIsConfigOpen(true)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition ${
-                storageSource === "supabase"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : "bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200"
-              }`}
-              title="Configurar conexión a Supabase Cloud"
-            >
-              {storageSource === "supabase" ? (
-                <Cloud className="w-4 h-4 text-emerald-600" />
-              ) : (
-                <HardDrive className="w-4 h-4 text-gray-500" />
-              )}
-              <span className="hidden md:inline">{syncMessage}</span>
-              <Database className="w-3.5 h-3.5 opacity-60 ml-0.5" />
-            </button>
-
             {viewMode === "dashboard" && (
-              <>
-                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-bold text-gray-700 hover:bg-gray-50">
-                  <Upload className="w-4 h-4" />
-                  <span className="hidden sm:inline">Importar JSON</span>
-                  <input
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={(e) => handleImportJSON(e.target.files?.[0])}
-                  />
-                </label>
-
-                <button
-                  type="button"
-                  onClick={handleCrearNuevo}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E31E24] text-white text-xs sm:text-sm font-bold hover:bg-[#B81419] shadow-sm transition"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Nuevo Estudio</span>
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={handleCrearNuevo}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E31E24] text-white text-xs sm:text-sm font-bold hover:bg-[#B81419] shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nuevo Estudio</span>
+              </button>
             )}
 
             {viewMode !== "dashboard" && selectedEstudio && (
@@ -914,6 +889,11 @@ export default function HomePage() {
           </div>
         )}
       </main>
+
+      {/* PIE DE PÁGINA CORPORATIVO */}
+      <footer className="no-print mt-auto border-t border-gray-200 bg-white/70 py-4 text-center text-xs text-gray-400">
+        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.4</strong>
+      </footer>
 
       {/* Modal de configuración de Supabase */}
       <SupabaseConfigModal
