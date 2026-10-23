@@ -55,7 +55,6 @@ export function registrarNuevoEvaluador(nombre: string): string[] {
   const limpio = nombre.trim();
   if (!limpio) return getCatalogoEvaluadores();
   const actual = getCatalogoEvaluadores();
-  // Normalizar para que no se duplique "abraham" vs "Abraham"
   const existe = actual.some(
     (item) => item.toLowerCase() === limpio.toLowerCase()
   );
@@ -64,9 +63,85 @@ export function registrarNuevoEvaluador(nombre: string): string[] {
     if (typeof window !== "undefined") {
       localStorage.setItem(EVALUADORES_KEY, JSON.stringify(actualizado));
     }
+    // Guardar también en Supabase de forma asíncrona
+    guardarEvaluadorEnSupabase(limpio);
     return actualizado;
   }
   return actual;
+}
+
+/**
+ * Carga el catálogo de personas / evaluadores desde Supabase
+ * (de la tabla evaluadores y de los estudios registrados)
+ */
+export async function cargarCatalogoEvaluadoresSupabase(): Promise<string[]> {
+  const local = getCatalogoEvaluadores();
+  const supabase = getSupabaseClient();
+  if (!supabase) return local;
+
+  try {
+    let remotos: string[] = [];
+
+    // 1. Cargar desde tabla de evaluadores
+    const { data, error } = await supabase.from("evaluadores").select("nombre");
+    if (!error && data) {
+      data.forEach((row: { nombre: string }) => {
+        if (row.nombre && row.nombre.trim()) remotos.push(row.nombre.trim());
+      });
+    }
+
+    // 2. Extraer de los estudios existentes en Supabase
+    const { data: estudiosData } = await supabase
+      .from("estudios_socioeconomicos")
+      .select("data")
+      .limit(300);
+
+    if (estudiosData) {
+      estudiosData.forEach((row: { data?: { evaluadorNombre?: string } }) => {
+        const nom = row.data?.evaluadorNombre?.trim();
+        if (nom) remotos.push(nom);
+      });
+    }
+
+    const mocks = [
+      "lic. claudia morales",
+      "abrahán garcía",
+      "abraham garcia",
+      "lic. andrea romero",
+      "lic. roberto sánchez",
+      "lic. roberto sanchez",
+    ];
+
+    const combinados = Array.from(
+      new Set([...local, ...remotos].filter((n) => !mocks.includes(n.toLowerCase())))
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(EVALUADORES_KEY, JSON.stringify(combinados));
+    }
+    return combinados;
+  } catch {
+    return local;
+  }
+}
+
+/**
+ * Persiste una persona / evaluador en la base de datos de Supabase
+ */
+export async function guardarEvaluadorEnSupabase(nombre: string): Promise<void> {
+  const limpio = nombre.trim();
+  if (!limpio) return;
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    await supabase.from("evaluadores").upsert(
+      { nombre: limpio },
+      { onConflict: "nombre" }
+    );
+  } catch {
+    // Si la tabla evaluadores aún no se ha creado con SQL, se guardará en los registros de estudios
+  }
 }
 
 export interface SupabaseRuntimeConfig {

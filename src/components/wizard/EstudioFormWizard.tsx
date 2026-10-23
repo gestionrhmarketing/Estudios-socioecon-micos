@@ -216,6 +216,23 @@ export function EstudioFormWizard({
               </button>
             </div>
 
+            {/* Responsable de captura (solo control interno en Dashboard, NO sale en el PDF oficial) */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-gray-500" />
+                <span className="text-xs font-bold text-gray-700">
+                  Responsable de captura (control interno):
+                </span>
+              </div>
+              <input
+                type="text"
+                value={estudio.evaluadorNombre || ""}
+                onChange={(e) => onChange({ ...estudio, evaluadorNombre: e.target.value })}
+                placeholder="Nombre de quien realiza el estudio"
+                className="bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-800 focus:outline-none focus:border-[#E31E24] w-full sm:w-64"
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase text-gray-600 mb-1">

@@ -36,3 +36,23 @@ create policy "Permitir acceso completo a estudios_socioeconomicos"
 -- ============================================================================
 alter table public.estudios_socioeconomicos replica identity full;
 alter publication supabase_realtime add table public.estudios_socioeconomicos;
+
+-- ============================================================================
+-- TABLA DE EVALUADORES / CAPTURISTAS (PERSISTENCIA CENTRALIZADA)
+-- Guarda las personas que capturan estudios para que se compartan entre dispositivos
+-- ============================================================================
+create table if not exists public.evaluadores (
+  id uuid primary key default gen_random_uuid(),
+  nombre text unique not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.evaluadores enable row level security;
+
+create policy "Permitir acceso completo a evaluadores"
+  on public.evaluadores for all
+  using (true)
+  with check (true);
+
+alter table public.evaluadores replica identity full;
+alter publication supabase_realtime add table public.evaluadores;

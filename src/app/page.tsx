@@ -13,6 +13,9 @@ import {
   guardarEstudioInmediato,
   eliminarEstudio,
   suscribirEstudiosRealtime,
+  getCatalogoEvaluadores,
+  cargarCatalogoEvaluadoresSupabase,
+  guardarEvaluadorEnSupabase,
 } from "@/lib/storage";
 import { LogoGestionRH } from "@/components/pdf/BrandGraphics";
 import dynamic from "next/dynamic";
@@ -65,6 +68,8 @@ import {
   Download,
   FolderArchive,
   Loader2,
+  User,
+  Users,
 } from "lucide-react";
 
 type ViewMode = "dashboard" | "wizard" | "pdf";
@@ -80,6 +85,39 @@ export default function HomePage() {
   const [filterDictamen, setFilterDictamen] = useState<Dictamen | "TODOS">(
     "TODOS"
   );
+  const [filterEvaluador, setFilterEvaluador] = useState<string>("TODOS");
+  const [miNombreEvaluador, setMiNombreEvaluador] = useState<string>("");
+  const [catalogoEvaluadores, setCatalogoEvaluadores] = useState<string[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // Inicialización de capturista y catálogo desde Supabase
+  useEffect(() => {
+    setMounted(true);
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("gestionrh_mi_evaluador");
+      if (saved) setMiNombreEvaluador(saved);
+    }
+    // Cargar personas reales guardadas en Supabase
+    cargarCatalogoEvaluadoresSupabase().then((lista) => {
+      setCatalogoEvaluadores(lista);
+    });
+  }, []);
+
+  const handleSetMiNombre = async (nombre: string) => {
+    const limpio = nombre.trim();
+    setMiNombreEvaluador(limpio);
+    if (typeof window !== "undefined") {
+      if (limpio) {
+        localStorage.setItem("gestionrh_mi_evaluador", limpio);
+        await guardarEvaluadorEnSupabase(limpio);
+        setCatalogoEvaluadores((prev) =>
+          Array.from(new Set([...prev, limpio])).sort((a, b) => a.localeCompare(b))
+        );
+      } else {
+        localStorage.removeItem("gestionrh_mi_evaluador");
+      }
+    }
+  };
 
   // Estado de almacenamiento (Supabase / Local)
   const [storageSource, setStorageSource] = useState<"supabase" | "local">(
@@ -255,7 +293,18 @@ export default function HomePage() {
   // Al hacer clic en "Nuevo Estudio" NO se envía a Supabase de inmediato,
   // se abre en modo borrador y se almacena solo en el dispositivo hasta que el usuario decida guardar
   const handleCrearNuevo = () => {
-    const nuevo = createEmptyEstudio();
+    let capturista = miNombreEvaluador.trim();
+    if (!capturista && nombresEvaluadoresDisponibles.length > 0) {
+      const resp = window.prompt(
+        `¿Quién realiza este estudio?\n(Personas guardadas: ${nombresEvaluadoresDisponibles.join(", ")})\nEscribe tu nombre o presiona Aceptar para continuar:`,
+        ""
+      );
+      if (resp && resp.trim()) {
+        capturista = resp.trim();
+        handleSetMiNombre(capturista);
+      }
+    }
+    const nuevo = createEmptyEstudio(undefined, capturista || undefined);
     handleUpdateEstudio(nuevo);
     setSelectedEstudio(nuevo);
     setViewMode("wizard");
@@ -307,6 +356,23 @@ export default function HomePage() {
     reader.readAsText(file);
   };
 
+  // Conteo de capturas por persona para el Dashboard
+  const evaluadoresMap = estudios.reduce((acc, est) => {
+    const ev = (est.evaluadorNombre || "Sin asignar").trim();
+    acc[ev] = (acc[ev] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const listaEvaluadoresConEstudios = Object.keys(evaluadoresMap);
+
+  // Lista combinada de personas (del catálogo en Supabase + quienes hayan guardado estudios)
+  const nombresEvaluadoresDisponibles = Array.from(
+    new Set([
+      ...catalogoEvaluadores,
+      ...listaEvaluadoresConEstudios.filter((n) => n !== "Sin asignar"),
+    ])
+  ).sort((a, b) => a.localeCompare(b));
+
   const estudiosFiltrados = estudios.filter((est) => {
     const nombre = (
       est.candidatoNombrePortada ||
@@ -315,18 +381,24 @@ export default function HomePage() {
     ).toLowerCase();
     const folio = (est.folio || "").toLowerCase();
     const puesto = (est.puestoSolicitado || "").toLowerCase();
+    const evaluador = (est.evaluadorNombre || "Sin asignar").toLowerCase();
     const q = searchQuery.toLowerCase().trim();
 
     const matchesQuery =
       !q ||
       nombre.includes(q) ||
       folio.includes(q) ||
-      puesto.includes(q);
+      puesto.includes(q) ||
+      evaluador.includes(q);
 
     const matchesDictamen =
       filterDictamen === "TODOS" || est.dictamen === filterDictamen;
 
-    return matchesQuery && matchesDictamen;
+    const matchesEvaluador =
+      filterEvaluador === "TODOS" ||
+      (est.evaluadorNombre || "Sin asignar") === filterEvaluador;
+
+    return matchesQuery && matchesDictamen && matchesEvaluador;
   });
 
   const countAceptables = estudios.filter(
@@ -363,10 +435,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onDoubleClick={() => setIsConfigOpen(true)}
-                title="Versión 1.0.5"
+                title="Versión 1.0.6"
                 className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 border border-gray-200 px-2 py-0.5 rounded-md tracking-wider transition select-none"
               >
-                v1.0.5
+                v1.0.6
               </button>
             </div>
           </div>
@@ -501,6 +573,115 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* Barra de Control de Capturistas (Solo nombres reales guardados en Supabase) */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-[#E31E24]" />
+                  <h3 className="font-bold text-sm text-gray-900">
+                    Control de Captura por Persona
+                  </h3>
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">
+                    Base de Datos Supabase
+                  </span>
+                </div>
+
+                {/* Identificación de quién está usando este dispositivo */}
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-gray-400 shrink-0" />
+                  <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                    Mi nombre:
+                  </span>
+                  <select
+                    value={miNombreEvaluador}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__OTRO__") {
+                        const nuevo = window.prompt("Escribe tu nombre completo para guardarlo en la Base de Datos:");
+                        if (nuevo && nuevo.trim()) {
+                          handleSetMiNombre(nuevo.trim());
+                        }
+                      } else {
+                        handleSetMiNombre(val);
+                      }
+                    }}
+                    className="border border-gray-300 bg-white rounded-lg px-2.5 py-1 text-xs font-bold text-gray-800 focus:outline-none focus:border-[#E31E24] min-w-[170px]"
+                  >
+                    <option value="">
+                      {nombresEvaluadoresDisponibles.length === 0
+                        ? "-- Sin personas registradas --"
+                        : "-- Elige tu nombre --"}
+                    </option>
+                    {mounted &&
+                      nombresEvaluadoresDisponibles.map((nombre) => (
+                        <option key={nombre} value={nombre}>
+                          {nombre}
+                        </option>
+                      ))}
+                    {mounted &&
+                      miNombreEvaluador &&
+                      !nombresEvaluadoresDisponibles.includes(miNombreEvaluador) && (
+                        <option value={miNombreEvaluador}>
+                          {miNombreEvaluador}
+                        </option>
+                      )}
+                    <option value="__OTRO__" className="text-[#E31E24] font-bold">
+                      + Registrar nueva persona...
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Píldoras con conteo de estudios por persona */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs font-bold text-gray-500 mr-1">
+                  Filtrar por:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFilterEvaluador("TODOS")}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    filterEvaluador === "TODOS"
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  <span>Todos los miembros</span>
+                  <span className="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">
+                    {estudios.length}
+                  </span>
+                </button>
+
+                {listaEvaluadoresConEstudios.map((evaluador) => {
+                  const count = evaluadoresMap[evaluador];
+                  const isSelected = filterEvaluador === evaluador;
+                  return (
+                    <button
+                      key={evaluador}
+                      type="button"
+                      onClick={() => setFilterEvaluador(evaluador)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                        isSelected
+                          ? "bg-[#E31E24] text-white shadow-sm"
+                          : "bg-red-50 text-red-900 border border-red-200 hover:bg-red-100"
+                      }`}
+                    >
+                      <span>{evaluador}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          isSelected
+                            ? "bg-white text-[#E31E24]"
+                            : "bg-[#E31E24] text-white"
+                        }`}
+                      >
+                        {count} {count === 1 ? "estudio" : "estudios"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Buscador y Filtros */}
             <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="relative w-full sm:max-w-md">
@@ -566,6 +747,7 @@ export default function HomePage() {
                       <tr className="bg-gray-50 border-b border-gray-200 text-[11px] font-bold uppercase text-gray-500">
                         <th className="py-3.5 px-4">Folio</th>
                         <th className="py-3.5 px-4">Candidato</th>
+                        <th className="py-3.5 px-4">Capturado por</th>
                         <th className="py-3.5 px-4">Puesto Solicitado</th>
                         <th className="py-3.5 px-4">Fecha Aplicación</th>
                         <th className="py-3.5 px-4 text-center">Dictamen</th>
@@ -596,6 +778,12 @@ export default function HomePage() {
                                   "Metepec"}{" "}
                                 • {est.datosContacto.telefonoCelular || "Sin tel."}
                               </div>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold">
+                                <User className="w-3 h-3 text-gray-400" />
+                                {evaluador}
+                              </span>
                             </td>
                             <td className="py-3.5 px-4 text-gray-700 font-medium">
                               {est.puestoSolicitado || "—"}
@@ -726,7 +914,7 @@ export default function HomePage() {
 
       {/* PIE DE PÁGINA CORPORATIVO */}
       <footer className="no-print mt-auto border-t border-gray-200 bg-white/70 py-4 text-center text-xs text-gray-400">
-        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.5</strong>
+        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.6</strong>
       </footer>
 
       {/* Modal de configuración de Supabase */}
