@@ -120,8 +120,8 @@ export default function HomePage() {
   const [syncMessage, setSyncMessage] = useState<string>("Guardado al día");
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
-  const cargarDatos = useCallback(async () => {
-    const res = await listarEstudios();
+  const cargarDatos = useCallback(async (forceRefresh = false) => {
+    const res = await listarEstudios(forceRefresh);
     setEstudios(res.estudios);
     setStorageSource(res.source);
     if (res.error) {
@@ -257,7 +257,7 @@ export default function HomePage() {
       return;
     }
     await eliminarEstudio(id);
-    await cargarDatos();
+    await cargarDatos(true);
   };
 
   const handleExportJSON = (estudio: EstudioSocioeconomico) => {

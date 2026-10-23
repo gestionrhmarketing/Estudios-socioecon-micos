@@ -130,6 +130,11 @@ function getLocalEstudios(): EstudioSocioeconomico[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) {
+      // Si ya hay configuración de Supabase, no auto-generar estudios demo para evitar re-subidas fantasma
+      const cfg = getSupabaseConfig();
+      if (cfg) {
+        return [];
+      }
       const demo = createDemoEstudio();
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([demo]));
       return [demo];
@@ -204,21 +209,21 @@ export async function listarEstudios(forceRefresh = false): Promise<{
       };
     }
 
-    if (data && data.length > 0) {
+    if (data) {
       const remoteEstudios = data.map(
         (row: { data: EstudioSocioeconomico }) => row.data
       );
 
-      // Combinar inteligentemente sin pisar estudios que el usuario esté creando localmente
-      const map = new Map<string, EstudioSocioeconomico>();
-      remoteEstudios.forEach((e) => map.set(e.id, e));
-      localList.forEach((e) => {
-        if (!map.has(e.id)) {
-          map.set(e.id, e);
-        }
-      });
+      // Solo preservamos borradores locales activos que se estén creando en este dispositivo (isDraft: true)
+      // y que aún no han sido guardados en Supabase.
+      // Los estudios finalizados o eliminados de Supabase se limpian del LocalStorage local.
+      const localDrafts = localList.filter(
+        (local) =>
+          local.isDraft === true &&
+          !remoteEstudios.some((r) => r.id === local.id)
+      );
 
-      const combined = Array.from(map.values()).sort(
+      const combined = [...remoteEstudios, ...localDrafts].sort(
         (a, b) =>
           new Date(b.updatedAt || 0).getTime() -
           new Date(a.updatedAt || 0).getTime()
@@ -227,13 +232,6 @@ export async function listarEstudios(forceRefresh = false): Promise<{
       setLocalEstudios(combined);
       memoryListCache = { estudios: combined, timestamp: Date.now() };
       return { estudios: combined, source: "supabase" };
-    } else if (localList.length > 0) {
-      // Subir el estudio demo inicial
-      for (const item of localList) {
-        await guardarEstudioInmediato(item);
-      }
-      memoryListCache = { estudios: localList, timestamp: Date.now() };
-      return { estudios: localList, source: "supabase" };
     }
 
     return { estudios: [], source: "supabase" };
