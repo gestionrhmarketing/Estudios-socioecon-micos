@@ -10,8 +10,20 @@ import {
 
 function CheckCell({ checked }: { checked: boolean }) {
   return (
-    <div className="w-[18px] h-[16px] border border-black flex items-center justify-center bg-white mx-auto text-[11px] font-bold text-[#E31E24] leading-none">
-      {checked ? "✕" : ""}
+    <div className="w-[18px] h-[16px] border border-black flex items-center justify-center bg-white mx-auto leading-none overflow-hidden select-none">
+      {checked ? (
+        <svg
+          viewBox="0 0 24 24"
+          className="w-[14px] h-[14px] text-black"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 12.5L9.5 18L20 5.5" />
+        </svg>
+      ) : null}
     </div>
   );
 }
@@ -400,7 +412,15 @@ export function EstudioPDFView({ estudio }: { estudio: EstudioSocioeconomico }) 
             </p>
             <div className="flex items-baseline flex-wrap gap-1 my-1">
               <span className="border-b border-gray-700 min-w-[290px] px-2 font-bold text-black">
-                {estudio.candidatoNombrePortada || estudio.datosGenerales.nombre}
+                {(() => {
+                  const raw = (
+                    estudio.candidatoNombrePortada ||
+                    estudio.datosGenerales.nombre ||
+                    ""
+                  ).trim();
+                  const clean = raw.replace(/^C\.\s*/i, "");
+                  return clean ? `C. ${clean}` : "C. ";
+                })()}
               </span>
               <span>Llevado a cabo el día:</span>
               <span className="border-b border-gray-700 min-w-[160px] px-2 font-semibold">
