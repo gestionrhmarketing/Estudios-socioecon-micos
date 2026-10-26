@@ -12,7 +12,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Shield,
   Loader2,
 } from "lucide-react";
 import { LogoGestionRH } from "../pdf/BrandGraphics";
@@ -20,7 +19,6 @@ import { UsuarioSistema } from "@/types/estudio";
 import {
   iniciarSesionSistema,
   registrarUsuarioSistema,
-  ADMIN_DEFAULT,
 } from "@/lib/storage";
 
 interface AuthLoginViewProps {
@@ -88,13 +86,6 @@ export function AuthLoginView({ onLoginSuccess }: AuthLoginViewProps) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const cargarCredencialesAdmin = () => {
-    setLoginEmail(ADMIN_DEFAULT.email);
-    setLoginPassword(ADMIN_DEFAULT.password || "6327");
-    setErrorMsg("");
-    setSuccessMsg("");
   };
 
   return (
@@ -230,21 +221,6 @@ export function AuthLoginView({ onLoginSuccess }: AuthLoginViewProps) {
                 </>
               )}
             </button>
-
-            {/* Acceso Rápido para Admin */}
-            <div className="pt-4 border-t border-gray-100 flex flex-col items-center gap-1.5 text-center">
-              <span className="text-[11px] text-gray-400">
-                ¿Eres la Administradora del Sistema?
-              </span>
-              <button
-                type="button"
-                onClick={cargarCredencialesAdmin}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600 hover:text-[#E31E24] bg-gray-50 hover:bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 transition"
-              >
-                <Shield className="w-3 h-3 text-[#E31E24]" />
-                <span>Autollenar acceso Gaby Rodriguez</span>
-              </button>
-            </div>
           </form>
         )}
 
@@ -342,7 +318,7 @@ export function AuthLoginView({ onLoginSuccess }: AuthLoginViewProps) {
 
         {/* Pie con versión y derechos */}
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-100 text-center text-[11px] text-gray-400">
-          <span>Gestión rh • Sistema Interno de Validación v1.1.0</span>
+          <span>Gestión rh • Sistema Interno de Validación v1.1.1</span>
         </div>
       </div>
     </div>

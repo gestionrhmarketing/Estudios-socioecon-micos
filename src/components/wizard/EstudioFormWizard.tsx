@@ -31,6 +31,7 @@ import {
   Eye,
   File,
   Loader2,
+  MapPin,
   PenLine,
   RotateCcw,
   ShieldCheck,
@@ -222,7 +223,7 @@ export function EstudioFormWizard({
               </button>
             </div>
 
-            {/* Responsable de captura (solo control interno en Dashboard, NO sale en el PDF oficial) */}
+            {/* Responsable de captura (fijo con el nombre del usuario registrado, no editable) */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-gray-500" />
@@ -230,13 +231,14 @@ export function EstudioFormWizard({
                   Responsable de captura (control interno):
                 </span>
               </div>
-              <input
-                type="text"
-                value={estudio.evaluadorNombre || ""}
-                onChange={(e) => onChange({ ...estudio, evaluadorNombre: e.target.value })}
-                placeholder="Nombre de quien realiza el estudio"
-                className="bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-800 focus:outline-none focus:border-[#E31E24] w-full sm:w-64"
-              />
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-full sm:w-auto shadow-sm">
+                <span className="text-xs font-bold text-gray-800">
+                  {estudio.evaluadorNombre || "Sin asignar"}
+                </span>
+                <span className="text-[10px] bg-gray-100 text-gray-500 font-semibold px-2 py-0.5 rounded-full">
+                  Fijo (No editable)
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -3090,9 +3092,14 @@ export function EstudioFormWizard({
               {/* Ajuste de Lugar y Fecha de Firma */}
               <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                    Lugar / Municipio
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase text-slate-600">
+                      Lugar / Municipio
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Autocompletado del estudio
+                    </span>
+                  </div>
                   <input
                     type="text"
                     value={
@@ -3111,6 +3118,9 @@ export function EstudioFormWizard({
                     placeholder="Ej. Metepec, Estado de México"
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
                   />
+                  <span className="text-[10.5px] text-slate-400 mt-1 block">
+                    Toma en automático la delegación o municipio capturada en el Paso 2 (o Metepec, Edo. Méx.).
+                  </span>
                 </div>
 
                 <div>

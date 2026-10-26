@@ -539,10 +539,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onDoubleClick={() => setIsConfigOpen(true)}
-                title="Versión 1.1.0"
+                title="Versión 1.1.1"
                 className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 border border-gray-200 px-2 py-0.5 rounded-md tracking-wider transition select-none"
               >
-                v1.1.0
+                v1.1.1
               </button>
             </div>
           </div>
@@ -1070,7 +1070,7 @@ export default function HomePage() {
 
       {/* PIE DE PÁGINA CORPORATIVO */}
       <footer className="no-print mt-auto border-t border-gray-200 bg-white/70 py-4 text-center text-xs text-gray-400">
-        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.1.0</strong>
+        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.1.1</strong>
       </footer>
 
       {/* Modal de configuración de Supabase */}
