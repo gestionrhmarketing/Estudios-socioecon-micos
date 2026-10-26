@@ -41,7 +41,7 @@ const EstudioPDFView = dynamic(
   {
     loading: () => (
       <div className="flex items-center justify-center p-12 text-sm text-gray-500 font-medium">
-        Generando vista de 11 páginas...
+        Generando vista de 12 páginas...
       </div>
     ),
   }
@@ -241,6 +241,46 @@ export default function HomePage() {
   // Estado de descarga masiva ZIP
   const [descargandoZipId, setDescargandoZipId] = useState<string | null>(null);
 
+  // Estado para el modal de eliminación segura con confirmación por palabra 'eliminar'
+  const [estudioAEliminar, setEstudioAEliminar] = useState<{
+    id: string;
+    nombre: string;
+    folio: string;
+  } | null>(null);
+  const [palabraConfirmacion, setPalabraConfirmacion] = useState("");
+  const [eliminandoEnProceso, setEliminandoEnProceso] = useState(false);
+
+  const solicitarEliminar = (estudio: EstudioSocioeconomico, nombreCandidato: string) => {
+    setEstudioAEliminar({
+      id: estudio.id,
+      nombre: nombreCandidato,
+      folio: estudio.folio || "Sin folio",
+    });
+    setPalabraConfirmacion("");
+  };
+
+  const confirmarEliminacionDefinitiva = async () => {
+    if (!estudioAEliminar) return;
+    if (palabraConfirmacion.trim().toLowerCase() !== "eliminar") return;
+
+    const idAEliminar = estudioAEliminar.id;
+    setEliminandoEnProceso(true);
+
+    // 1. Eliminación optimista instantánea (desaparece de inmediato al 1er clic sin tener que picar varias veces)
+    setEstudios((prev) => prev.filter((e) => e.id !== idAEliminar));
+
+    // 2. Ejecutar borrado permanente en Supabase y LocalStorage
+    await eliminarEstudio(idAEliminar);
+
+    // 3. Cerrar modal y resetear estado
+    setEliminandoEnProceso(false);
+    setEstudioAEliminar(null);
+    setPalabraConfirmacion("");
+
+    // 4. Refresco silencioso de sincronización
+    await cargarDatos(true);
+  };
+
   // Descargar todo el expediente documental en un archivo ZIP (para oficina)
   const handleDescargarExpedienteZip = async (estudio: EstudioSocioeconomico) => {
     const adjuntos = estudio.documentosPresentados.filter((d) => d.fileUrl);
@@ -308,20 +348,6 @@ export default function HomePage() {
     handleUpdateEstudio(nuevo);
     setSelectedEstudio(nuevo);
     setViewMode("wizard");
-  };
-
-  const handleEliminar = async (id: string, nombre: string) => {
-    if (
-      !window.confirm(
-        `¿Seguro que deseas eliminar el estudio de "${
-          nombre || "Candidato sin nombre"
-        }"?`
-      )
-    ) {
-      return;
-    }
-    await eliminarEstudio(id);
-    await cargarDatos(true);
   };
 
   const handleExportJSON = (estudio: EstudioSocioeconomico) => {
@@ -435,10 +461,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onDoubleClick={() => setIsConfigOpen(true)}
-                title="Versión 1.0.6"
+                title="Versión 1.0.8"
                 className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 border border-gray-200 px-2 py-0.5 rounded-md tracking-wider transition select-none"
               >
-                v1.0.6
+                v1.0.8
               </button>
             </div>
           </div>
@@ -481,7 +507,7 @@ export default function HomePage() {
                     }`}
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Vista PDF (11 Págs.)</span>
+                    <span>Vista PDF (12 Págs.)</span>
                   </button>
                 </div>
 
@@ -826,7 +852,7 @@ export default function HomePage() {
                                     setViewMode("pdf");
                                   }}
                                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-[#E31E24] text-xs font-bold"
-                                  title="Ver PDF Oficial de 11 páginas"
+                                  title="Ver PDF Oficial de 12 páginas"
                                 >
                                   <FileText className="w-3.5 h-3.5" />
                                   <span>PDF</span>
@@ -858,7 +884,7 @@ export default function HomePage() {
 
                                 <button
                                   type="button"
-                                  onClick={() => handleEliminar(est.id, nombre)}
+                                  onClick={() => solicitarEliminar(est, nombre)}
                                   className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
                                   title="Eliminar estudio"
                                 >
@@ -892,13 +918,13 @@ export default function HomePage() {
         )}
 
         {/* ===================================================================
-            VISTA 3: REPORTE OFICIAL PDF (11 PÁGINAS IDÉNTICAS)
+            VISTA 3: REPORTE OFICIAL PDF (12 PÁGINAS IDÉNTICAS)
         =================================================================== */}
         {viewMode === "pdf" && selectedEstudio && (
           <div>
             <div className="no-print bg-gray-800 text-white px-4 py-2.5 text-center text-xs flex flex-wrap items-center justify-center gap-4">
               <span>
-                Vista previa exacta de las <strong>11 páginas</strong> del formato oficial de{" "}
+                Vista previa exacta de las <strong>12 páginas</strong> del formato oficial de{" "}
                 <strong>Gestión rh (2026)</strong>.
               </span>
               <span className="text-gray-300">
@@ -914,7 +940,7 @@ export default function HomePage() {
 
       {/* PIE DE PÁGINA CORPORATIVO */}
       <footer className="no-print mt-auto border-t border-gray-200 bg-white/70 py-4 text-center text-xs text-gray-400">
-        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.6</strong>
+        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.7</strong>
       </footer>
 
       {/* Modal de configuración de Supabase */}
@@ -923,6 +949,96 @@ export default function HomePage() {
         onClose={() => setIsConfigOpen(false)}
         onConfigUpdated={cargarDatos}
       />
+
+      {/* MODAL DE CONFIRMACIÓN DE ELIMINACIÓN SEGURA */}
+      {estudioAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-red-200 max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-[#E31E24]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 leading-tight">
+                  ¿Eliminar estudio definitivamente?
+                </h3>
+                <span className="text-xs font-semibold text-[#E31E24]">
+                  Folio: {estudioAEliminar.folio || "Sin folio"}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-red-50/80 border border-red-200/80 rounded-xl p-3.5 text-xs text-red-900 leading-relaxed">
+              <p className="font-bold mb-1 flex items-center gap-1.5">
+                <span>⚠️</span>
+                <span>Se perderá toda la información de forma irreversible:</span>
+              </p>
+              <p className="text-red-800">
+                Se eliminarán permanentemente todos los datos, respuestas, fotografías y documentos adjuntos del expediente de{" "}
+                <strong>&quot;{estudioAEliminar.nombre || "Candidato sin nombre"}&quot;</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-700 block">
+                Para confirmar, escribe la palabra <span className="text-[#E31E24] font-mono font-extrabold text-sm">&quot;eliminar&quot;</span> abajo:
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={palabraConfirmacion}
+                onChange={(e) => setPalabraConfirmacion(e.target.value)}
+                placeholder="escribe eliminar"
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    palabraConfirmacion.trim().toLowerCase() === "eliminar" &&
+                    !eliminandoEnProceso
+                  ) {
+                    confirmarEliminacionDefinitiva();
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-900 focus:outline-none focus:border-[#E31E24] focus:ring-2 focus:ring-red-100 placeholder:text-gray-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={eliminandoEnProceso}
+                onClick={() => {
+                  setEstudioAEliminar(null);
+                  setPalabraConfirmacion("");
+                }}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  palabraConfirmacion.trim().toLowerCase() !== "eliminar" ||
+                  eliminandoEnProceso
+                }
+                onClick={confirmarEliminacionDefinitiva}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-[#E31E24] hover:bg-[#B81419] disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+              >
+                {eliminandoEnProceso ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Eliminar Definitivamente</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2075,6 +2075,247 @@ export function EstudioPDFView({ estudio }: { estudio: EstudioSocioeconomico }) 
         </div>
         <PageFooter />
       </PageWrapper>
+
+      {/* =====================================================================
+          PÁGINA 12: AVISO DE PRIVACIDAD Y FIRMAS OFICIALES
+      ===================================================================== */}
+      <PageWrapper pageNumber={12}>
+        <div className="px-10 pt-8 flex flex-col flex-1 text-[#1E1E1E]">
+          {/* Cabecera idéntica al documento oficial */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col">
+                <span className="text-[26px] font-extrabold tracking-tight text-black leading-none">
+                  Aviso de
+                </span>
+                <span className="text-[26px] font-extrabold tracking-tight text-black leading-none">
+                  privacidad
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl border-2 border-[#E31E24] flex items-center justify-center p-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-full h-full text-[#E31E24]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </div>
+            </div>
+            <LogoGestionRH className="h-12" />
+          </div>
+
+          {/* Banner Rojo Oficial */}
+          <SectionBanner title="Reclutamiento & Selección GRH" />
+
+          {/* Línea de Lugar y Fecha */}
+          <div className="text-right text-[11px] text-[#222] my-3 font-normal">
+            <span className="font-semibold underline decoration-gray-400 underline-offset-4 px-2">
+              {estudio.avisoPrivacidad?.lugar ||
+                estudio.datosContacto.delegacionMunicipio ||
+                "Metepec, Estado de México"}
+            </span>
+            {" a "}
+            <span className="font-semibold underline decoration-gray-400 underline-offset-4 px-2">
+              {estudio.avisoPrivacidad?.dia ||
+                new Date().getDate().toString()}
+            </span>
+            {" de "}
+            <span className="font-semibold underline decoration-gray-400 underline-offset-4 px-2">
+              {estudio.avisoPrivacidad?.mes ||
+                new Intl.DateTimeFormat("es-MX", { month: "long" }).format(
+                  new Date()
+                )}
+            </span>
+            {" de "}
+            <span className="font-semibold underline decoration-gray-400 underline-offset-4 px-2">
+              {estudio.avisoPrivacidad?.anio ||
+                new Date().getFullYear().toString()}
+            </span>
+          </div>
+
+          {/* Párrafo de Declaración Bajo Protesta */}
+          <p className="text-[11px] leading-relaxed text-justify mb-4 text-[#222]">
+            Yo{" "}
+            <span className="font-bold underline decoration-gray-400 underline-offset-4 px-1 text-black">
+              {estudio.avisoPrivacidad?.candidato ||
+                estudio.candidatoNombrePortada ||
+                estudio.datosGenerales.nombre ||
+                "___________________________________"}
+            </span>
+            , manifiesto bajo protesta de decir verdad que la información
+            proporcionada durante el estudio socioeconómico realizado por el
+            representante de Gestión RH es verídica, completa y comprobable, y
+            que podrá ser corroborada en cualquier momento para fines del
+            proceso de reclutamiento y selección de personal de la empresa{" "}
+            <span className="font-bold underline decoration-gray-400 underline-offset-4 px-1 text-black">
+              {estudio.avisoPrivacidad?.empresa ||
+                estudio.empresaSolicitante ||
+                "___________________________________"}
+            </span>
+            , para el puesto de:{" "}
+            <span className="font-bold underline decoration-gray-400 underline-offset-4 px-1 text-black">
+              {estudio.avisoPrivacidad?.puesto ||
+                estudio.puestoSolicitado ||
+                "___________________________________"}
+            </span>
+            .
+          </p>
+
+          {/* FIRMA 1: Conformidad y Veracidad */}
+          <div className="my-3 flex flex-col items-center justify-center">
+            <div className="w-[360px] h-16 flex items-end justify-center">
+              {estudio.avisoPrivacidad?.firmaConformidadUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={estudio.avisoPrivacidad.firmaConformidadUrl}
+                  alt="Firma de conformidad y veracidad"
+                  className="max-h-16 max-w-full object-contain mb-1"
+                />
+              ) : (
+                <div className="h-10" />
+              )}
+            </div>
+            <div className="w-[360px] border-b border-gray-600 mb-1" />
+            <span className="text-[10.5px] text-[#333] font-normal text-center">
+              Firma de conformidad y veracidad de la información
+            </span>
+          </div>
+
+          {/* Texto Legal del Aviso de Privacidad */}
+          <div className="text-[9.5px] leading-snug text-[#2E2E2E] space-y-2 text-justify my-1">
+            <p>
+              Gestión RH, con domicilio en Calle Morelos No. 12 Oriente, Colonia
+              Pilares, Metepec, Estado de México, C.P. 52176, es responsable del
+              uso y protección de los datos personales que recabe, en
+              cumplimiento de la Ley Federal de Protección de Datos Personales en
+              Posesión de los Particulares.
+            </p>
+
+            <div>
+              <div className="font-bold text-black mb-0.5">
+                Finalidad del tratamiento de datos
+              </div>
+              <p>
+                Los datos personales recabados serán utilizados exclusivamente
+                para:
+              </p>
+              <ul className="list-disc ml-5 space-y-0.5 mt-0.5">
+                <li>Integrar el reporte del estudio socioeconómico.</li>
+                <li>
+                  Evaluar el perfil del candidato dentro del proceso de
+                  reclutamiento y selección.
+                </li>
+                <li>
+                  Transferir dicho reporte a la empresa contratante para la cual
+                  el titular participa en el proceso, como requisito para su
+                  posible contratación.
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <div className="font-bold text-black mb-0.5">
+                Transferencia de datos
+              </div>
+              <p>
+                Se informa que los datos personales serán transferidos
+                únicamente a la empresa solicitante del proceso de selección,
+                sin que se requiera consentimiento adicional, conforme a lo
+                previsto por la legislación aplicable.
+              </p>
+            </div>
+
+            <div>
+              <div className="font-bold text-black mb-0.5">Derechos ARCO</div>
+              <p>
+                El titular podrá ejercer en cualquier momento sus derechos de
+                Acceso, Rectificación, Cancelación u Oposición (ARCO), así como
+                conocer los terceros con quienes se comparten sus datos y las
+                condiciones del tratamiento, consultando el aviso de privacidad
+                integral disponible en el domicilio antes señalado.
+              </p>
+            </div>
+
+            <p className="pt-0.5">
+              Los datos proporcionados durante la entrevista tienen como
+              finalidad validar y verificar la información, y la documentación
+              entregada será devuelta al finalizar la misma.
+            </p>
+          </div>
+
+          {/* FIRMA 2: Conocimiento del Aviso de Privacidad */}
+          <div className="my-3 flex flex-col items-center justify-center">
+            <div className="w-[360px] h-16 flex items-end justify-center">
+              {estudio.avisoPrivacidad?.firmaAvisoPrivacidadUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={estudio.avisoPrivacidad.firmaAvisoPrivacidadUrl}
+                  alt="Firma aviso de privacidad"
+                  className="max-h-16 max-w-full object-contain mb-1"
+                />
+              ) : (
+                <div className="h-10" />
+              )}
+            </div>
+            <div className="w-[360px] border-b border-gray-600 mb-1" />
+            <span className="text-[10.5px] text-[#333] font-normal text-center">
+              Conozco el aviso de privacidad de datos personales
+            </span>
+          </div>
+
+          {/* Pie de página Oficial Rojo con QR */}
+          <div className="w-full mt-auto mb-4 select-none shrink-0">
+            <div className="bg-[#E31E24] rounded-2xl px-6 py-2.5 flex items-center justify-between text-white shadow-sm">
+              <div className="flex flex-col">
+                <span className="font-bold text-lg leading-tight tracking-tight">
+                  Gestión rh
+                </span>
+                <span className="text-[9px] text-white/90">
+                  www.gestionrh.com.mx
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-0.5 text-[9.5px]">
+                <div className="flex items-center gap-2">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-3.5 h-3.5 text-white shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                  </svg>
+                  <span>contacto@gestionrh.com.mx</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-3.5 h-3.5 text-white shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  <span>+52 55 1949 1693</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-1 rounded-xl shadow-inner">
+                <QRCodeGestionRH className="w-11 h-11" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </PageWrapper>
     </div>
   );
 }

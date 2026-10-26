@@ -453,19 +453,36 @@ export function guardarEstudio(
   }, 1000); // 1000ms debounce
 }
 
-export async function eliminarEstudio(id: string): Promise<void> {
+export async function eliminarEstudio(id: string): Promise<boolean> {
+  // 1. Cancelar cualquier guardado en segundo plano pendiente para este id
+  if (debounceTimers[id]) {
+    clearTimeout(debounceTimers[id]);
+    delete debounceTimers[id];
+  }
+
+  // 2. Limpiar inmediatamente de la memoria local y caché
   const localList = getLocalEstudios().filter((e) => e.id !== id);
   setLocalEstudios(localList);
   invalidarCacheLectura();
 
+  // 3. Eliminar de Supabase de inmediato
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      await supabase.from("estudios_socioeconomicos").delete().eq("id", id);
-    } catch {
-      // ignore
+      const { error } = await supabase
+        .from("estudios_socioeconomicos")
+        .delete()
+        .eq("id", id);
+      if (error) {
+        console.error("Error eliminando en Supabase:", error.message);
+        return false;
+      }
+    } catch (err) {
+      console.error("Error eliminando en Supabase:", err);
+      return false;
     }
   }
+  return true;
 }
 
 /**

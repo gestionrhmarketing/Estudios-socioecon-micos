@@ -89,6 +89,7 @@ export interface EstudioSocioeconomico {
   fechaElaboracion: string;
   folio: string;
   candidatoNombrePortada: string;
+  empresaSolicitante?: string;
   fechaRealizacion: string;
   puestoSolicitado: string;
   dictamen: Dictamen;
@@ -241,6 +242,23 @@ export interface EstudioSocioeconomico {
   // Página 11: Anexos
   anexosTexto: string;
   anexosImagenes: AnexoImagen[];
+
+  // Página 12: Aviso de Privacidad y Firmas
+  avisoPrivacidad?: AvisoPrivacidad;
+}
+
+export interface AvisoPrivacidad {
+  lugar?: string;
+  dia?: string;
+  mes?: string;
+  anio?: string;
+  candidato?: string;
+  empresa?: string;
+  puesto?: string;
+  firmaConformidadUrl?: string; // Firma 1: conformidad y veracidad
+  firmaAvisoPrivacidadUrl?: string; // Firma 2: aviso de privacidad
+  fechaFirmaConformidad?: string;
+  fechaFirmaAviso?: string;
 }
 
 export const DOCUMENTOS_CATALOGO: Array<{ id: number; nombre: string }> = [
@@ -341,6 +359,7 @@ export function createEmptyEstudio(id?: string, evaluadorNombre?: string): Estud
     }),
     folio: `ESE-2026-${folioNum}`,
     candidatoNombrePortada: "",
+    empresaSolicitante: "",
     fechaRealizacion: new Date().toISOString().split("T")[0],
     puestoSolicitado: "",
     dictamen: "ACEPTABLE",
@@ -505,6 +524,19 @@ export function createEmptyEstudio(id?: string, evaluadorNombre?: string): Estud
     comprobanteDomicilioTipo: "Luz",
     anexosTexto: "",
     anexosImagenes: [],
+    avisoPrivacidad: {
+      lugar: "Metepec, Estado de México",
+      dia: new Date().getDate().toString(),
+      mes: new Intl.DateTimeFormat("es-MX", { month: "long" }).format(new Date()),
+      anio: new Date().getFullYear().toString(),
+      candidato: "",
+      empresa: "",
+      puesto: "",
+      firmaConformidadUrl: "",
+      firmaAvisoPrivacidadUrl: "",
+      fechaFirmaConformidad: "",
+      fechaFirmaAviso: "",
+    },
   };
 }
 

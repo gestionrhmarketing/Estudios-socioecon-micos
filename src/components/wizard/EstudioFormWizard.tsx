@@ -31,8 +31,12 @@ import {
   Eye,
   File,
   Loader2,
+  PenLine,
+  RotateCcw,
+  ShieldCheck,
 } from "lucide-react";
 import { subirArchivoExpediente } from "@/lib/storage";
+import { SignaturePadModal } from "@/components/SignaturePadModal";
 
 interface Props {
   estudio: EstudioSocioeconomico;
@@ -49,6 +53,7 @@ const STEPS = [
   { id: 4, title: "4 y 5. Familia y Economía", short: "4-5. Economía", icon: Users },
   { id: 5, title: "6. Documentos Presentados", short: "6. Documentos", icon: FolderCheck },
   { id: 6, title: "Anexos Fotográficos", short: "Anexos", icon: ImageIcon },
+  { id: 7, title: "Aviso de Privacidad y Firmas", short: "Privacidad y Firmas", icon: PenLine },
 ];
 
 export function EstudioFormWizard({
@@ -60,6 +65,7 @@ export function EstudioFormWizard({
   const [activeStep, setActiveStep] = useState(0);
   const [activeEmpresaTab, setActiveEmpresaTab] = useState<0 | 1 | 2>(0);
   const [subiendoDocId, setSubiendoDocId] = useState<number | null>(null);
+  const [signatureModal, setSignatureModal] = useState<"conformidad" | "aviso" | null>(null);
 
   // Compresión ultraligera de imágenes:
   // Una foto de celular de 8MB-12MB se comprime a ~70KB-90KB con nitidez perfecta para hoja tamaño Carta.
@@ -299,6 +305,21 @@ export function EstudioFormWizard({
                   }
                   placeholder="Nombre y apellidos del candidato"
                   className="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm font-semibold focus:border-[#E31E24] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-600 mb-1">
+                  Empresa solicitante / Cliente
+                </label>
+                <input
+                  type="text"
+                  value={estudio.empresaSolicitante || ""}
+                  onChange={(e) =>
+                    onChange({ ...estudio, empresaSolicitante: e.target.value })
+                  }
+                  placeholder="Ej. Grupo Industrial del Centro S.A."
+                  className="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm focus:border-[#E31E24] focus:outline-none"
                 />
               </div>
 
@@ -2973,6 +2994,380 @@ export function EstudioFormWizard({
           </div>
         )}
 
+        {/* ===================================================================
+            PASO 7: AVISO DE PRIVACIDAD Y FIRMAS DIGITALES (PÁGINA 12)
+        =================================================================== */}
+        {activeStep === 7 && (
+          <div className="space-y-6">
+            <div className="border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2 text-[#E31E24] font-semibold text-xs uppercase tracking-wider mb-1">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Página 12 Oficial de Cierre</span>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">
+                Aviso de Privacidad y Firmas Digitales
+              </h2>
+              <p className="text-sm text-gray-500">
+                Este apartado se autocompleta con los datos generales del estudio y permite al candidato trazar las 2 firmas electrónicas requeridas por ley.
+              </p>
+            </div>
+
+            {/* Tarjeta de Datos Autocompletados */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                Datos vinculados automáticamente desde el estudio
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Candidato / Titular:</label>
+                  <input
+                    type="text"
+                    value={
+                      estudio.avisoPrivacidad?.candidato ??
+                      (estudio.candidatoNombrePortada || estudio.datosGenerales.nombre || "")
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...estudio,
+                        avisoPrivacidad: {
+                          ...estudio.avisoPrivacidad,
+                          candidato: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Nombre completo del candidato"
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                  />
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Empresa Solicitante:</label>
+                  <input
+                    type="text"
+                    value={
+                      estudio.avisoPrivacidad?.empresa ??
+                      (estudio.empresaSolicitante || "")
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...estudio,
+                        empresaSolicitante: e.target.value,
+                        avisoPrivacidad: {
+                          ...estudio.avisoPrivacidad,
+                          empresa: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Empresa contratante"
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                  />
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Puesto Solicitado:</label>
+                  <input
+                    type="text"
+                    value={
+                      estudio.avisoPrivacidad?.puesto ??
+                      (estudio.puestoSolicitado || "")
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...estudio,
+                        puestoSolicitado: e.target.value,
+                        avisoPrivacidad: {
+                          ...estudio.avisoPrivacidad,
+                          puesto: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Puesto del candidato"
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                  />
+                </div>
+              </div>
+
+              {/* Ajuste de Lugar y Fecha de Firma */}
+              <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                    Lugar / Municipio
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      estudio.avisoPrivacidad?.lugar ??
+                      (estudio.datosContacto.delegacionMunicipio || "Metepec, Estado de México")
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...estudio,
+                        avisoPrivacidad: {
+                          ...estudio.avisoPrivacidad,
+                          lugar: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Ej. Metepec, Estado de México"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                    Día
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      estudio.avisoPrivacidad?.dia ??
+                      new Date().getDate().toString()
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...estudio,
+                        avisoPrivacidad: {
+                          ...estudio.avisoPrivacidad,
+                          dia: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                    Mes
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      estudio.avisoPrivacidad?.mes ??
+                      new Intl.DateTimeFormat("es-MX", { month: "long" }).format(new Date())
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...estudio,
+                        avisoPrivacidad: {
+                          ...estudio.avisoPrivacidad,
+                          mes: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 1: DECLARACIÓN Y FIRMA 1 */}
+            <div className="bg-white border-2 border-red-100 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-7 h-7 rounded-full bg-[#E31E24] text-white flex items-center justify-center text-xs font-bold">
+                  1
+                </span>
+                <h3 className="font-bold text-gray-900 text-base">
+                  Firma de conformidad y veracidad de la información
+                </h3>
+              </div>
+
+              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 leading-relaxed mb-5">
+                <p>
+                  Yo <strong>{estudio.candidatoNombrePortada || estudio.datosGenerales.nombre || "____________________"}</strong>, manifiesto bajo protesta de decir verdad que la información proporcionada durante el estudio socioeconómico realizado por el representante de Gestión RH es verídica, completa y comprobable, y que podrá ser corroborada en cualquier momento para fines del proceso de reclutamiento y selección de personal de la empresa <strong>{estudio.empresaSolicitante || "____________________"}</strong>, para el puesto de: <strong>{estudio.puestoSolicitado || "____________________"}</strong>.
+                </p>
+              </div>
+
+              {/* Botón / Área de Firma 1 */}
+              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                {estudio.avisoPrivacidad?.firmaConformidadUrl ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-white p-3 rounded-xl border border-gray-300 shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={estudio.avisoPrivacidad.firmaConformidadUrl}
+                        alt="Firma 1 Conformidad"
+                        className="h-24 max-w-xs object-contain"
+                      />
+                    </div>
+                    <div className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Firma 1 capturada y guardada con éxito</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setSignatureModal("conformidad")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
+                      >
+                        <PenLine className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Volver a firmar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...estudio,
+                            avisoPrivacidad: {
+                              ...estudio.avisoPrivacidad,
+                              firmaConformidadUrl: "",
+                            },
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-600 hover:bg-red-100"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Eliminar firma</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-3">
+                    <p className="text-xs text-gray-500">
+                      El candidato debe plasmar su firma digital de conformidad sobre los datos proporcionados.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSignatureModal("conformidad")}
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#E31E24] text-white text-sm font-bold hover:bg-[#B81419] shadow transition transform active:scale-95"
+                    >
+                      <PenLine className="w-4 h-4" />
+                      <span>✍️ Dibujar Firma 1 (Conformidad)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: LECTURA LEGAL Y FIRMA 2 */}
+            <div className="bg-white border-2 border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
+                  2
+                </span>
+                <h3 className="font-bold text-gray-900 text-base">
+                  Conozco el aviso de privacidad de datos personales
+                </h3>
+              </div>
+
+              {/* Resumen del Aviso Legal */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-[11px] text-slate-700 space-y-2 mb-5">
+                <p>
+                  <strong>Gestión RH</strong>, con domicilio en Calle Morelos No. 12 Oriente, Colonia Pilares, Metepec, Estado de México, C.P. 52176, es responsable del uso y protección de los datos personales que recabe, en cumplimiento de la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.
+                </p>
+                <div>
+                  <strong className="text-slate-900">Finalidad del tratamiento:</strong> Integrar el reporte del estudio socioeconómico, evaluar perfil del candidato y transferir a la empresa solicitante.
+                </div>
+                <div>
+                  <strong className="text-slate-900">Derechos ARCO:</strong> El titular podrá ejercer en cualquier momento sus derechos de Acceso, Rectificación, Cancelación u Oposición consultando el aviso en el domicilio señalado.
+                </div>
+              </div>
+
+              {/* Botón / Área de Firma 2 */}
+              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                {estudio.avisoPrivacidad?.firmaAvisoPrivacidadUrl ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-white p-3 rounded-xl border border-gray-300 shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={estudio.avisoPrivacidad.firmaAvisoPrivacidadUrl}
+                        alt="Firma 2 Aviso Privacidad"
+                        className="h-24 max-w-xs object-contain"
+                      />
+                    </div>
+                    <div className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Firma 2 capturada y guardada con éxito</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setSignatureModal("aviso")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
+                      >
+                        <PenLine className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Volver a firmar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...estudio,
+                            avisoPrivacidad: {
+                              ...estudio.avisoPrivacidad,
+                              firmaAvisoPrivacidadUrl: "",
+                            },
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-600 hover:bg-red-100"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Eliminar firma</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-3">
+                    <p className="text-xs text-gray-500">
+                      Firma de conocimiento y aceptación de las políticas de privacidad y derechos ARCO.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSignatureModal("aviso")}
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#E31E24] text-white text-sm font-bold hover:bg-[#B81419] shadow transition transform active:scale-95"
+                    >
+                      <PenLine className="w-4 h-4" />
+                      <span>✍️ Dibujar Firma 2 (Aviso de Privacidad)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal para dibujar firmas interactivas */}
+        <SignaturePadModal
+          isOpen={signatureModal !== null}
+          title={
+            signatureModal === "conformidad"
+              ? "Firma 1: Conformidad y veracidad de la información"
+              : "Firma 2: Conozco el aviso de privacidad de datos personales"
+          }
+          subtitle={
+            signatureModal === "conformidad"
+              ? "Manifiesto bajo protesta de decir verdad que la información proporcionada es verídica"
+              : "Acepto el tratamiento de datos personales conforme a la ley"
+          }
+          initialDataUrl={
+            signatureModal === "conformidad"
+              ? estudio.avisoPrivacidad?.firmaConformidadUrl
+              : estudio.avisoPrivacidad?.firmaAvisoPrivacidadUrl
+          }
+          onClose={() => setSignatureModal(null)}
+          onSave={(dataUrl) => {
+            if (signatureModal === "conformidad") {
+              onChange({
+                ...estudio,
+                avisoPrivacidad: {
+                  ...estudio.avisoPrivacidad,
+                  firmaConformidadUrl: dataUrl,
+                  fechaFirmaConformidad: new Date().toISOString(),
+                },
+              });
+            } else if (signatureModal === "aviso") {
+              onChange({
+                ...estudio,
+                avisoPrivacidad: {
+                  ...estudio.avisoPrivacidad,
+                  firmaAvisoPrivacidadUrl: dataUrl,
+                  fechaFirmaAviso: new Date().toISOString(),
+                },
+              });
+            }
+          }}
+        />
+
         {/* Barra de navegación inferior del Wizard */}
         <div className="mt-8 pt-5 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3">
           <button
@@ -3031,7 +3426,7 @@ export function EstudioFormWizard({
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 shadow-sm"
               >
                 <FileText className="w-4 h-4" />
-                Guardar y Ver PDF (11 Págs.)
+                Guardar y Ver PDF (12 Págs.)
               </button>
             )}
           </div>
