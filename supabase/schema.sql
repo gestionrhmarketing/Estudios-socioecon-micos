@@ -58,7 +58,7 @@ alter table public.evaluadores replica identity full;
 alter publication supabase_realtime add table public.evaluadores;
 
 -- ============================================================================
--- TABLA DE USUARIOS DEL SISTEMA Y AUTENTICACIÓN INTERNA (v1.0.9)
+-- TABLA DE USUARIOS DEL SISTEMA Y AUTENTICACIÓN INTERNA (v1.1.0)
 -- Control de perfiles, registro de evaluadores y autorización por admin
 -- ============================================================================
 create table if not exists public.usuarios_sistema (

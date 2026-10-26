@@ -342,7 +342,7 @@ export function AuthLoginView({ onLoginSuccess }: AuthLoginViewProps) {
 
         {/* Pie con versión y derechos */}
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-100 text-center text-[11px] text-gray-400">
-          <span>Gestión rh • Sistema Interno de Validación v1.0.9</span>
+          <span>Gestión rh • Sistema Interno de Validación v1.1.0</span>
         </div>
       </div>
     </div>
