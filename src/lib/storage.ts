@@ -1,10 +1,29 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { EstudioSocioeconomico, createDemoEstudio, generateUUID } from "@/types/estudio";
+import {
+  EstudioSocioeconomico,
+  createDemoEstudio,
+  generateUUID,
+  UsuarioSistema,
+  RolUsuario,
+  EstadoUsuario,
+} from "@/types/estudio";
 
 const LOCAL_STORAGE_KEY = "gestionrh_estudios_v1";
 const SUPABASE_CONFIG_KEY = "gestionrh_supabase_config_v1";
 const EVALUADORES_KEY = "gestionrh_evaluadores_catalog_v1";
+const USUARIOS_KEY = "gestionrh_usuarios_sistema_v1";
+const SESION_KEY = "gestionrh_usuario_activo_v1";
 export const BUCKET_EXPEDIENTES = "expedientes";
+
+export const ADMIN_DEFAULT: UsuarioSistema = {
+  id: "admin-gaby-rodriguez",
+  nombre: "Gaby Rodriguez",
+  email: "seleccion@gestionrh.com.mx",
+  password: "6327",
+  rol: "admin",
+  estado: "activo",
+  createdAt: "2026-01-01T00:00:00.000Z",
+};
 
 const EVALUADORES_DEFAULT: string[] = [];
 
@@ -582,6 +601,353 @@ export function suscribirEstudiosRealtime(
     };
   } catch (err) {
     console.error("Error al suscribirse a Realtime:", err);
+    return () => {};
+  }
+}
+
+// ============================================================================
+// GESTIÓN DE USUARIOS Y AUTENTICACIÓN INTERNA
+// ============================================================================
+
+export function getUsuarioActivo(): UsuarioSistema | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SESION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as UsuarioSistema;
+  } catch {
+    return null;
+  }
+}
+
+export function setUsuarioActivo(user: UsuarioSistema | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (user) {
+      localStorage.setItem(SESION_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(SESION_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function cerrarSesion(): void {
+  setUsuarioActivo(null);
+}
+
+export function getUsuariosLocales(): UsuarioSistema[] {
+  if (typeof window === "undefined") return [ADMIN_DEFAULT];
+  try {
+    const raw = localStorage.getItem(USUARIOS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Asegurar que siempre esté Gaby Rodriguez
+        if (!parsed.some((u) => u.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase())) {
+          parsed.unshift(ADMIN_DEFAULT);
+        }
+        return parsed;
+      }
+    }
+  } catch {
+    // fallback
+  }
+  const inicial = [ADMIN_DEFAULT];
+  try {
+    localStorage.setItem(USUARIOS_KEY, JSON.stringify(inicial));
+  } catch {
+    // ignore
+  }
+  return inicial;
+}
+
+export function setUsuariosLocales(users: UsuarioSistema[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(USUARIOS_KEY, JSON.stringify(users));
+  } catch {
+    // ignore
+  }
+}
+
+export async function cargarUsuariosSistema(): Promise<UsuarioSistema[]> {
+  const local = getUsuariosLocales();
+  const supabase = getSupabaseClient();
+  if (!supabase) return local;
+
+  try {
+    const { data, error } = await supabase
+      .from("usuarios_sistema")
+      .select("id, nombre, email, password, rol, estado, created_at, updated_at");
+
+    if (error) {
+      return local;
+    }
+
+    if (data && data.length > 0) {
+      const remotos: UsuarioSistema[] = data.map((row) => ({
+        id: row.id,
+        nombre: row.nombre,
+        email: row.email,
+        password: row.password,
+        rol: (row.rol || "evaluador") as RolUsuario,
+        estado: (row.estado || "pendiente") as EstadoUsuario,
+        createdAt: row.created_at || new Date().toISOString(),
+        updatedAt: row.updated_at,
+      }));
+
+      // Combinar asegurando que el admin principal siempre esté presente
+      const combinados = [...remotos];
+      if (!combinados.some((u) => u.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase())) {
+        combinados.unshift(ADMIN_DEFAULT);
+        supabase.from("usuarios_sistema").upsert({
+          id: ADMIN_DEFAULT.id,
+          nombre: ADMIN_DEFAULT.nombre,
+          email: ADMIN_DEFAULT.email,
+          password: ADMIN_DEFAULT.password,
+          rol: ADMIN_DEFAULT.rol,
+          estado: ADMIN_DEFAULT.estado,
+        }).then(() => {});
+      }
+
+      setUsuariosLocales(combinados);
+      return combinados;
+    } else {
+      // Si la tabla remota existe pero está vacía, sembrar la cuenta de Gaby
+      await supabase.from("usuarios_sistema").upsert({
+        id: ADMIN_DEFAULT.id,
+        nombre: ADMIN_DEFAULT.nombre,
+        email: ADMIN_DEFAULT.email,
+        password: ADMIN_DEFAULT.password,
+        rol: ADMIN_DEFAULT.rol,
+        estado: ADMIN_DEFAULT.estado,
+      });
+      return local;
+    }
+  } catch {
+    return local;
+  }
+}
+
+export async function registrarUsuarioSistema(
+  nombre: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; message: string; usuario?: UsuarioSistema }> {
+  const limpioNombre = nombre.trim();
+  const limpioEmail = email.trim().toLowerCase();
+  const limpioPass = password.trim();
+
+  if (!limpioNombre || !limpioEmail || !limpioPass) {
+    return { success: false, message: "Todos los campos son obligatorios." };
+  }
+
+  // Traer usuarios existentes
+  const usuarios = await cargarUsuariosSistema();
+  const existente = usuarios.find((u) => u.email.toLowerCase() === limpioEmail);
+
+  if (existente) {
+    if (existente.estado === "pendiente") {
+      return {
+        success: false,
+        message: "Ya existe una solicitud pendiente con este correo. Espera a que la administradora la autorice.",
+      };
+    }
+    return {
+      success: false,
+      message: "Ya existe una cuenta registrada con este correo electrónico.",
+    };
+  }
+
+  // Si es la cuenta principal de Gaby Rodriguez, registrar como admin activo
+  const esAdmin = limpioEmail === ADMIN_DEFAULT.email.toLowerCase();
+
+  const nuevoUsuario: UsuarioSistema = {
+    id: generateUUID(),
+    nombre: limpioNombre,
+    email: limpioEmail,
+    password: limpioPass,
+    rol: esAdmin ? "admin" : "evaluador",
+    estado: esAdmin ? "activo" : "pendiente",
+    createdAt: new Date().toISOString(),
+  };
+
+  const listaActualizada = [...usuarios, nuevoUsuario];
+  setUsuariosLocales(listaActualizada);
+
+  // Guardar en Supabase si está disponible
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from("usuarios_sistema").insert({
+        id: nuevoUsuario.id,
+        nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email,
+        password: nuevoUsuario.password,
+        rol: nuevoUsuario.rol,
+        estado: nuevoUsuario.estado,
+      });
+    } catch (err) {
+      console.warn("Aviso: no se pudo sincronizar usuario en Supabase inmediatamente:", err);
+    }
+  }
+
+  // Registrar también en el catálogo de evaluadores
+  guardarEvaluadorEnSupabase(limpioNombre);
+
+  return {
+    success: true,
+    message: esAdmin
+      ? "Cuenta de administrador lista para iniciar sesión."
+      : "Tu solicitud de registro ha sido enviada con éxito. La administradora (Gaby Rodriguez) revisará y autorizará tu cuenta.",
+    usuario: nuevoUsuario,
+  };
+}
+
+export async function iniciarSesionSistema(
+  email: string,
+  password: string
+): Promise<{ success: boolean; message: string; usuario?: UsuarioSistema }> {
+  const limpioEmail = email.trim().toLowerCase();
+  const limpioPass = password.trim();
+
+  // Acceso de emergencia o directo garantizado para Gaby Rodriguez
+  if (
+    limpioEmail === ADMIN_DEFAULT.email.toLowerCase() &&
+    limpioPass === ADMIN_DEFAULT.password
+  ) {
+    setUsuarioActivo(ADMIN_DEFAULT);
+    return { success: true, message: "Bienvenida Gaby Rodriguez", usuario: ADMIN_DEFAULT };
+  }
+
+  const usuarios = await cargarUsuariosSistema();
+  const usuario = usuarios.find((u) => u.email.toLowerCase() === limpioEmail);
+
+  if (!usuario) {
+    return { success: false, message: "Correo o contraseña incorrectos." };
+  }
+
+  if (usuario.password !== limpioPass) {
+    return { success: false, message: "Correo o contraseña incorrectos." };
+  }
+
+  if (usuario.estado === "pendiente") {
+    return {
+      success: false,
+      message:
+        "Tu solicitud de registro está pendiente de aprobación por la administradora (Gaby Rodriguez). Te notificaremos cuando tu acceso sea autorizado.",
+    };
+  }
+
+  if (usuario.estado === "rechazado") {
+    return {
+      success: false,
+      message:
+        "Tu solicitud de acceso fue rechazada por la administración. Comunícate a seleccion@gestionrh.com.mx para mayor información.",
+    };
+  }
+
+  // Usuario activo y autorizado
+  setUsuarioActivo(usuario);
+  return { success: true, message: `Bienvenido(a), ${usuario.nombre}`, usuario };
+}
+
+export async function actualizarEstadoUsuarioSistema(
+  id: string,
+  nuevoEstado: EstadoUsuario,
+  nuevoRol?: RolUsuario
+): Promise<{ success: boolean; error?: string }> {
+  const usuarios = await cargarUsuariosSistema();
+  const idx = usuarios.findIndex((u) => u.id === id);
+  if (idx === -1) return { success: false, error: "Usuario no encontrado" };
+
+  usuarios[idx] = {
+    ...usuarios[idx],
+    estado: nuevoEstado,
+    ...(nuevoRol ? { rol: nuevoRol } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+
+  setUsuariosLocales(usuarios);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase
+        .from("usuarios_sistema")
+        .update({
+          estado: nuevoEstado,
+          ...(nuevoRol ? { rol: nuevoRol } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al actualizar usuario";
+      return { success: false, error: msg };
+    }
+  }
+
+  return { success: true };
+}
+
+export async function eliminarUsuarioSistema(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  let usuarios = await cargarUsuariosSistema();
+  const target = usuarios.find((u) => u.id === id);
+  if (!target) return { success: false, error: "Usuario no encontrado" };
+
+  if (target.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase()) {
+    return {
+      success: false,
+      error: "No se puede eliminar la cuenta principal de administración.",
+    };
+  }
+
+  usuarios = usuarios.filter((u) => u.id !== id);
+  setUsuariosLocales(usuarios);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from("usuarios_sistema").delete().eq("id", id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al eliminar usuario";
+      return { success: false, error: msg };
+    }
+  }
+
+  return { success: true };
+}
+
+export function suscribirUsuariosRealtime(
+  onCambio: () => void
+): () => void {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel("usuarios_realtime_broadcast")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "usuarios_sistema",
+        },
+        () => {
+          onCambio();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch {
     return () => {};
   }
 }

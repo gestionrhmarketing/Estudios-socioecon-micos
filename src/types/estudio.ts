@@ -2,6 +2,20 @@ export type Dictamen = "ACEPTABLE" | "CON RESERVAS" | "NO ACEPTABLE";
 export type EvaluacionNivel = "Bueno" | "Regular" | "Malo" | "";
 export type SiNo = "Si" | "No" | "";
 
+export type RolUsuario = "admin" | "evaluador";
+export type EstadoUsuario = "activo" | "pendiente" | "rechazado";
+
+export interface UsuarioSistema {
+  id: string;
+  nombre: string;
+  email: string;
+  password?: string;
+  rol: RolUsuario;
+  estado: EstadoUsuario;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface ReferenciaLaboral {
   empresa: string;
   giroEmpresarial: string;

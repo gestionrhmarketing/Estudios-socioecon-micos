@@ -6,6 +6,7 @@ import {
   Dictamen,
   createEmptyEstudio,
   generateUUID,
+  UsuarioSistema,
 } from "@/types/estudio";
 import {
   listarEstudios,
@@ -16,8 +17,15 @@ import {
   getCatalogoEvaluadores,
   cargarCatalogoEvaluadoresSupabase,
   guardarEvaluadorEnSupabase,
+  getUsuarioActivo,
+  setUsuarioActivo,
+  cerrarSesion,
+  cargarUsuariosSistema,
+  suscribirUsuariosRealtime,
 } from "@/lib/storage";
 import { LogoGestionRH } from "@/components/pdf/BrandGraphics";
+import { AuthLoginView } from "@/components/auth/AuthLoginView";
+import { GestionUsuariosModal } from "@/components/admin/GestionUsuariosModal";
 import dynamic from "next/dynamic";
 
 // Carga perezosa (lazy load) de componentes pesados para carga instantánea del Dashboard inicial
@@ -70,6 +78,8 @@ import {
   Loader2,
   User,
   Users,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
 
 type ViewMode = "dashboard" | "wizard" | "pdf";
@@ -90,18 +100,57 @@ export default function HomePage() {
   const [catalogoEvaluadores, setCatalogoEvaluadores] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  // Inicialización de capturista y catálogo desde Supabase
+  // Sistema de autenticación interno y control de usuarios
+  const [usuarioActual, setUsuarioActual] = useState<UsuarioSistema | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isGestionUsuariosOpen, setIsGestionUsuariosOpen] = useState(false);
+  const [usuariosPendientesCount, setUsuariosPendientesCount] = useState(0);
+
+  const actualizarConteoPendientes = useCallback(async () => {
+    try {
+      const usuarios = await cargarUsuariosSistema();
+      const pend = usuarios.filter((u) => u.estado === "pendiente");
+      setUsuariosPendientesCount(pend.length);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Inicialización de sesión y sincronización de usuarios
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("gestionrh_mi_evaluador");
-      if (saved) setMiNombreEvaluador(saved);
+    const sesion = getUsuarioActivo();
+    if (sesion && sesion.estado === "activo") {
+      setUsuarioActual(sesion);
+      setMiNombreEvaluador(sesion.nombre);
     }
-    // Cargar personas reales guardadas en Supabase
+    setAuthLoading(false);
+
+    actualizarConteoPendientes();
+
+    // Cargar catálogo de evaluadores desde Supabase
     cargarCatalogoEvaluadoresSupabase().then((lista) => {
       setCatalogoEvaluadores(lista);
     });
-  }, []);
+
+    // Suscripción en tiempo real para cambios de usuarios y solicitudes
+    const unsubscribe = suscribirUsuariosRealtime(() => {
+      actualizarConteoPendientes();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [actualizarConteoPendientes]);
+
+  const handleLogout = () => {
+    if (window.confirm("¿Deseas cerrar tu sesión?")) {
+      cerrarSesion();
+      setUsuarioActual(null);
+      setViewMode("dashboard");
+      setSelectedEstudio(null);
+    }
+  };
 
   const handleSetMiNombre = async (nombre: string) => {
     const limpio = nombre.trim();
@@ -330,21 +379,12 @@ export default function HomePage() {
     }
   };
 
-  // Al hacer clic en "Nuevo Estudio" NO se envía a Supabase de inmediato,
-  // se abre en modo borrador y se almacena solo en el dispositivo hasta que el usuario decida guardar
+  // Al hacer clic en "Nuevo Estudio", se vincula de inmediato al usuario autenticado
+  // (sin preguntar "¿quién eres?" ya que la persona ha iniciado sesión)
   const handleCrearNuevo = () => {
-    let capturista = miNombreEvaluador.trim();
-    if (!capturista && nombresEvaluadoresDisponibles.length > 0) {
-      const resp = window.prompt(
-        `¿Quién realiza este estudio?\n(Personas guardadas: ${nombresEvaluadoresDisponibles.join(", ")})\nEscribe tu nombre o presiona Aceptar para continuar:`,
-        ""
-      );
-      if (resp && resp.trim()) {
-        capturista = resp.trim();
-        handleSetMiNombre(capturista);
-      }
-    }
-    const nuevo = createEmptyEstudio(undefined, capturista || undefined);
+    const capturista = usuarioActual?.nombre || miNombreEvaluador.trim() || "Evaluador";
+    const nuevo = createEmptyEstudio(undefined, capturista);
+    nuevo.evaluadorNombre = capturista;
     handleUpdateEstudio(nuevo);
     setSelectedEstudio(nuevo);
     setViewMode("wizard");
@@ -399,7 +439,20 @@ export default function HomePage() {
     ])
   ).sort((a, b) => a.localeCompare(b));
 
-  const estudiosFiltrados = estudios.filter((est) => {
+  const esAdmin = usuarioActual?.rol === "admin";
+
+  // Control estricto de visibilidad por rol solicitado:
+  // - Administradora (Gaby Rodriguez): ve y audita los estudios de todos.
+  // - Evaluadores (Gerardo Garcia, Sergio Soto, etc.): ven ÚNICAMENTE sus propios registros.
+  const estudiosVisibles = estudios.filter((est) => {
+    if (esAdmin) return true;
+    if (!usuarioActual) return false;
+    const autorEstudio = (est.evaluadorNombre || "").trim().toLowerCase();
+    const miNombre = (usuarioActual.nombre || "").trim().toLowerCase();
+    return autorEstudio === miNombre;
+  });
+
+  const estudiosFiltrados = estudiosVisibles.filter((est) => {
     const nombre = (
       est.candidatoNombrePortada ||
       est.datosGenerales.nombre ||
@@ -427,15 +480,40 @@ export default function HomePage() {
     return matchesQuery && matchesDictamen && matchesEvaluador;
   });
 
-  const countAceptables = estudios.filter(
+  const countAceptables = estudiosVisibles.filter(
     (e) => e.dictamen === "ACEPTABLE"
   ).length;
-  const countReservas = estudios.filter(
+  const countReservas = estudiosVisibles.filter(
     (e) => e.dictamen === "CON RESERVAS"
   ).length;
-  const countNoAceptables = estudios.filter(
+  const countNoAceptables = estudiosVisibles.filter(
     (e) => e.dictamen === "NO ACEPTABLE"
   ).length;
+
+  // Gate de autenticación: Si aún está verificando sesión o no hay sesión activa
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-100 via-gray-50 to-slate-100 flex flex-col items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-[#E31E24] mb-3" />
+        <span className="text-sm font-semibold text-gray-700">
+          Iniciando sistema de Gestión RH...
+        </span>
+      </div>
+    );
+  }
+
+  if (!usuarioActual) {
+    return (
+      <AuthLoginView
+        onLoginSuccess={(user) => {
+          setUsuarioActual(user);
+          setMiNombreEvaluador(user.nombre);
+          actualizarConteoPendientes();
+          cargarDatos(true);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -461,10 +539,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onDoubleClick={() => setIsConfigOpen(true)}
-                title="Versión 1.0.8"
+                title="Versión 1.0.9"
                 className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 border border-gray-200 px-2 py-0.5 rounded-md tracking-wider transition select-none"
               >
-                v1.0.8
+                v1.0.9
               </button>
             </div>
           </div>
@@ -528,6 +606,57 @@ export default function HomePage() {
                 </button>
               </>
             )}
+
+            {/* Perfil del Usuario Activo */}
+            {usuarioActual && (
+              <div className="flex items-center gap-2 border-l border-gray-200 pl-2 sm:pl-3 ml-1">
+                {esAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsGestionUsuariosOpen(true)}
+                    className="relative inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold transition shadow-sm"
+                    title="Administrar usuarios y solicitudes de acceso"
+                  >
+                    <Users className="w-3.5 h-3.5 text-gray-700" />
+                    <span className="hidden sm:inline">Usuarios</span>
+                    {usuariosPendientesCount > 0 && (
+                      <span className="bg-[#E31E24] text-white text-[10px] px-1.5 py-0.2 rounded-full font-extrabold animate-pulse">
+                        {usuariosPendientesCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-2.5 py-1.5 rounded-xl">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      esAdmin
+                        ? "bg-[#E31E24] text-white"
+                        : "bg-blue-600 text-white"
+                    }`}
+                  >
+                    {esAdmin ? "G" : (usuarioActual.nombre.charAt(0) || "U").toUpperCase()}
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-gray-800 leading-tight truncate max-w-[100px] sm:max-w-[150px]">
+                      {usuarioActual.nombre}
+                    </span>
+                    <span className="text-[9px] text-gray-400 font-semibold leading-none">
+                      {esAdmin ? "Administradora" : "Evaluador"}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition"
+                  title="Cerrar Sesión"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -543,13 +672,13 @@ export default function HomePage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm">
                 <div className="text-xs font-bold uppercase text-gray-400">
-                  Total Estudios
+                  {esAdmin ? "Total Estudios (Todos)" : "Mis Estudios"}
                 </div>
                 <div className="text-3xl font-extrabold text-gray-900 mt-1">
-                  {estudios.length}
+                  {estudiosVisibles.length}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  Formato Oficial 2026
+                  {esAdmin ? "Vista Administrador" : `Capturados por ${usuarioActual.nombre}`}
                 </div>
               </div>
 
@@ -599,114 +728,115 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Barra de Control de Capturistas (Solo nombres reales guardados en Supabase) */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200 shadow-sm space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-[#E31E24]" />
-                  <h3 className="font-bold text-sm text-gray-900">
-                    Control de Captura por Persona
-                  </h3>
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">
-                    Base de Datos Supabase
-                  </span>
-                </div>
+            {/* SECCIÓN 1: VISTA PARA ADMINISTRADOR (GABY RODRIGUEZ) */}
+            {esAdmin ? (
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-[#E31E24]" />
+                    <h3 className="font-bold text-sm text-gray-900">
+                      Control General de Captura por Persona
+                    </h3>
+                    <span className="text-xs bg-red-50 text-[#E31E24] px-2 py-0.5 rounded-full font-bold">
+                      Vista Administradora
+                    </span>
+                  </div>
 
-                {/* Identificación de quién está usando este dispositivo */}
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-400 shrink-0" />
-                  <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-                    Mi nombre:
-                  </span>
-                  <select
-                    value={miNombreEvaluador}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "__OTRO__") {
-                        const nuevo = window.prompt("Escribe tu nombre completo para guardarlo en la Base de Datos:");
-                        if (nuevo && nuevo.trim()) {
-                          handleSetMiNombre(nuevo.trim());
-                        }
-                      } else {
-                        handleSetMiNombre(val);
-                      }
-                    }}
-                    className="border border-gray-300 bg-white rounded-lg px-2.5 py-1 text-xs font-bold text-gray-800 focus:outline-none focus:border-[#E31E24] min-w-[170px]"
+                  <button
+                    type="button"
+                    onClick={() => setIsGestionUsuariosOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black text-white text-xs font-bold transition shadow-sm"
                   >
-                    <option value="">
-                      {nombresEvaluadoresDisponibles.length === 0
-                        ? "-- Sin personas registradas --"
-                        : "-- Elige tu nombre --"}
-                    </option>
-                    {mounted &&
-                      nombresEvaluadoresDisponibles.map((nombre) => (
-                        <option key={nombre} value={nombre}>
-                          {nombre}
-                        </option>
-                      ))}
-                    {mounted &&
-                      miNombreEvaluador &&
-                      !nombresEvaluadoresDisponibles.includes(miNombreEvaluador) && (
-                        <option value={miNombreEvaluador}>
-                          {miNombreEvaluador}
-                        </option>
-                      )}
-                    <option value="__OTRO__" className="text-[#E31E24] font-bold">
-                      + Registrar nueva persona...
-                    </option>
-                  </select>
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Gestionar Evaluadores</span>
+                    {usuariosPendientesCount > 0 && (
+                      <span className="bg-[#E31E24] text-white text-[10px] px-1.5 py-0.2 rounded-full font-extrabold">
+                        {usuariosPendientesCount} pendientes
+                      </span>
+                    )}
+                  </button>
                 </div>
-              </div>
 
-              {/* Píldoras con conteo de estudios por persona */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-xs font-bold text-gray-500 mr-1">
-                  Filtrar por:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setFilterEvaluador("TODOS")}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                    filterEvaluador === "TODOS"
-                      ? "bg-gray-900 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  <span>Todos los miembros</span>
-                  <span className="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">
-                    {estudios.length}
+                {/* Píldoras con conteo de estudios por persona */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs font-bold text-gray-500 mr-1">
+                    Filtrar por:
                   </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterEvaluador("TODOS")}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                      filterEvaluador === "TODOS"
+                        ? "bg-gray-900 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    <span>Todos los evaluadores</span>
+                    <span className="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">
+                      {estudios.length}
+                    </span>
+                  </button>
 
-                {listaEvaluadoresConEstudios.map((evaluador) => {
-                  const count = evaluadoresMap[evaluador];
-                  const isSelected = filterEvaluador === evaluador;
-                  return (
-                    <button
-                      key={evaluador}
-                      type="button"
-                      onClick={() => setFilterEvaluador(evaluador)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        isSelected
-                          ? "bg-[#E31E24] text-white shadow-sm"
-                          : "bg-red-50 text-red-900 border border-red-200 hover:bg-red-100"
-                      }`}
-                    >
-                      <span>{evaluador}</span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  {listaEvaluadoresConEstudios.map((evaluador) => {
+                    const count = evaluadoresMap[evaluador];
+                    const isSelected = filterEvaluador === evaluador;
+                    return (
+                      <button
+                        key={evaluador}
+                        type="button"
+                        onClick={() => setFilterEvaluador(evaluador)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                           isSelected
-                            ? "bg-white text-[#E31E24]"
-                            : "bg-[#E31E24] text-white"
+                            ? "bg-[#E31E24] text-white shadow-sm"
+                            : "bg-red-50 text-red-900 border border-red-200 hover:bg-red-100"
                         }`}
                       >
-                        {count} {count === 1 ? "estudio" : "estudios"}
-                      </span>
-                    </button>
-                  );
-                })}
+                        <span>{evaluador}</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            isSelected
+                              ? "bg-white text-[#E31E24]"
+                              : "bg-[#E31E24] text-white"
+                          }`}
+                        >
+                          {count} {count === 1 ? "estudio" : "estudios"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* SECCIÓN 2: BANNER PERSONALIZADO PARA EL EVALUADOR (SOLO VE SUS ESTUDIOS) */
+              <div className="bg-white rounded-2xl p-5 border border-blue-100 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-extrabold text-base">
+                    {(usuarioActual.nombre.charAt(0) || "U").toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-base text-gray-900">
+                        Mis Estudios Socioeconómicos
+                      </h3>
+                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
+                        Acceso Privado
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Sesión activa como <strong className="text-gray-900">{usuarioActual.nombre}</strong>. Solo tú tienes acceso a tus registros.
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-extrabold text-gray-900">
+                    {estudiosVisibles.length}
+                  </span>
+                  <span className="block text-[11px] text-gray-400 font-semibold">
+                    {estudiosVisibles.length === 1 ? "estudio tuyo" : "estudios tuyos"}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Buscador y Filtros */}
             <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -940,7 +1070,7 @@ export default function HomePage() {
 
       {/* PIE DE PÁGINA CORPORATIVO */}
       <footer className="no-print mt-auto border-t border-gray-200 bg-white/70 py-4 text-center text-xs text-gray-400">
-        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.7</strong>
+        Gestión rh · Solución Integral · Sistema de Estudios Socioeconómicos · <strong>Versión 1.0.9</strong>
       </footer>
 
       {/* Modal de configuración de Supabase */}
@@ -1038,6 +1168,15 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Gestión de Usuarios y Solicitudes (Exclusivo Administrador) */}
+      {esAdmin && (
+        <GestionUsuariosModal
+          isOpen={isGestionUsuariosOpen}
+          onClose={() => setIsGestionUsuariosOpen(false)}
+          onUsuariosUpdated={actualizarConteoPendientes}
+        />
       )}
     </div>
   );

@@ -56,3 +56,34 @@ create policy "Permitir acceso completo a evaluadores"
 
 alter table public.evaluadores replica identity full;
 alter publication supabase_realtime add table public.evaluadores;
+
+-- ============================================================================
+-- TABLA DE USUARIOS DEL SISTEMA Y AUTENTICACIÓN INTERNA (v1.0.9)
+-- Control de perfiles, registro de evaluadores y autorización por admin
+-- ============================================================================
+create table if not exists public.usuarios_sistema (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  email text unique not null,
+  password text not null,
+  rol text not null default 'evaluador', -- 'admin' | 'evaluador'
+  estado text not null default 'pendiente', -- 'activo' | 'pendiente' | 'rechazado'
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Cuenta administradora principal por defecto
+insert into public.usuarios_sistema (nombre, email, password, rol, estado)
+values ('Gaby Rodriguez', 'seleccion@gestionrh.com.mx', '6327', 'admin', 'activo')
+on conflict (email) do update 
+set rol = 'admin', estado = 'activo', password = '6327';
+
+alter table public.usuarios_sistema enable row level security;
+
+create policy "Permitir acceso completo a usuarios_sistema"
+  on public.usuarios_sistema for all
+  using (true)
+  with check (true);
+
+alter table public.usuarios_sistema replica identity full;
+alter publication supabase_realtime add table public.usuarios_sistema;
