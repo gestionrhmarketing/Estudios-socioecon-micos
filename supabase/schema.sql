@@ -1,8 +1,9 @@
 -- ============================================================================
--- ESQUEMA SUPABASE PARA APP DE ESTUDIOS SOCIOECONÓMICOS (GESTIÓN RH)
+-- ESQUEMA SUPABASE PARA APP DE ESTUDIOS SOCIOECONÓMICOS (GESTIÓN RH) v1.1.1
 -- Ejecuta este script en el SQL Editor de tu proyecto en https://supabase.com
 -- ============================================================================
 
+-- 1. TABLA PRINCIPAL DE ESTUDIOS SOCIOECONÓMICOS
 create table if not exists public.estudios_socioeconomicos (
   id uuid primary key default gen_random_uuid(),
   folio text not null,
@@ -21,26 +22,28 @@ create index if not exists idx_estudios_candidato on public.estudios_socioeconom
 create index if not exists idx_estudios_dictamen on public.estudios_socioeconomicos (dictamen);
 create index if not exists idx_estudios_updated_at on public.estudios_socioeconomicos (updated_at desc);
 
--- Habilitar Row Level Security (RLS) con política de acceso para la app
+-- Habilitar Row Level Security (RLS)
 alter table public.estudios_socioeconomicos enable row level security;
 
+drop policy if exists "Permitir acceso completo a estudios_socioeconomicos" on public.estudios_socioeconomicos;
 create policy "Permitir acceso completo a estudios_socioeconomicos"
   on public.estudios_socioeconomicos
   for all
   using (true)
   with check (true);
 
--- ============================================================================
--- ACTIVAR TRANSMISIÓN EN TIEMPO REAL (REALTIME WEBSOCKETS)
--- Permite que 5 computadoras y 5 celulares vean altas, bajas y cambios en vivo
--- ============================================================================
 alter table public.estudios_socioeconomicos replica identity full;
-alter publication supabase_realtime add table public.estudios_socioeconomicos;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'estudios_socioeconomicos'
+  ) then
+    alter publication supabase_realtime add table public.estudios_socioeconomicos;
+  end if;
+end $$;
 
--- ============================================================================
--- TABLA DE EVALUADORES / CAPTURISTAS (PERSISTENCIA CENTRALIZADA)
--- Guarda las personas que capturan estudios para que se compartan entre dispositivos
--- ============================================================================
+-- 2. TABLA DE EVALUADORES / CAPTURISTAS
 create table if not exists public.evaluadores (
   id uuid primary key default gen_random_uuid(),
   nombre text unique not null,
@@ -49,18 +52,24 @@ create table if not exists public.evaluadores (
 
 alter table public.evaluadores enable row level security;
 
+drop policy if exists "Permitir acceso completo a evaluadores" on public.evaluadores;
 create policy "Permitir acceso completo a evaluadores"
   on public.evaluadores for all
   using (true)
   with check (true);
 
 alter table public.evaluadores replica identity full;
-alter publication supabase_realtime add table public.evaluadores;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'evaluadores'
+  ) then
+    alter publication supabase_realtime add table public.evaluadores;
+  end if;
+end $$;
 
--- ============================================================================
--- TABLA DE USUARIOS DEL SISTEMA Y AUTENTICACIÓN INTERNA (v1.1.0)
--- Control de perfiles, registro de evaluadores y autorización por admin
--- ============================================================================
+-- 3. TABLA DE USUARIOS DEL SISTEMA Y AUTENTICACIÓN INTERNA
 create table if not exists public.usuarios_sistema (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
@@ -72,7 +81,7 @@ create table if not exists public.usuarios_sistema (
   updated_at timestamptz not null default now()
 );
 
--- Cuenta administradora principal por defecto
+-- Cuenta administradora principal por defecto (Gaby Rodriguez)
 insert into public.usuarios_sistema (nombre, email, password, rol, estado)
 values ('Gaby Rodriguez', 'seleccion@gestionrh.com.mx', '6327', 'admin', 'activo')
 on conflict (email) do update 
@@ -80,10 +89,19 @@ set rol = 'admin', estado = 'activo', password = '6327';
 
 alter table public.usuarios_sistema enable row level security;
 
+drop policy if exists "Permitir acceso completo a usuarios_sistema" on public.usuarios_sistema;
 create policy "Permitir acceso completo a usuarios_sistema"
   on public.usuarios_sistema for all
   using (true)
   with check (true);
 
 alter table public.usuarios_sistema replica identity full;
-alter publication supabase_realtime add table public.usuarios_sistema;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'usuarios_sistema'
+  ) then
+    alter publication supabase_realtime add table public.usuarios_sistema;
+  end if;
+end $$;

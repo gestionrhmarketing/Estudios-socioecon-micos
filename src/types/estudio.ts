@@ -5,6 +5,12 @@ export type SiNo = "Si" | "No" | "";
 export type RolUsuario = "admin" | "evaluador";
 export type EstadoUsuario = "activo" | "pendiente" | "rechazado";
 
+export interface DatosBancariosUsuario {
+  banco: string;
+  numeroTarjeta: string;
+  clabe: string;
+}
+
 export interface UsuarioSistema {
   id: string;
   nombre: string;
@@ -14,6 +20,8 @@ export interface UsuarioSistema {
   estado: EstadoUsuario;
   createdAt: string;
   updatedAt?: string;
+  datosBancarios?: DatosBancariosUsuario;
+  zonas?: string[];
 }
 
 export interface ReferenciaLaboral {

@@ -19,6 +19,7 @@ import { UsuarioSistema } from "@/types/estudio";
 import {
   iniciarSesionSistema,
   registrarUsuarioSistema,
+  limpiarSolicitudPendienteLocal,
 } from "@/lib/storage";
 
 interface AuthLoginViewProps {
@@ -140,9 +141,27 @@ export function AuthLoginView({ onLoginSuccess }: AuthLoginViewProps) {
 
         {/* Mensajes de Alerta */}
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5 text-xs text-red-700 animate-fadeIn">
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <span className="leading-snug">{errorMsg}</span>
+          <div className="mx-6 mt-4 p-3.5 bg-red-50 border border-red-200 rounded-2xl flex flex-col gap-2 text-xs text-red-700 animate-fadeIn">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span className="leading-snug">{errorMsg}</span>
+            </div>
+            {errorMsg.includes("solicitud pendiente") && (
+              <div className="pl-6 pt-1.5 border-t border-red-100 flex flex-wrap items-center justify-between gap-1">
+                <span className="text-[11px] text-red-600">¿Deseas reiniciar y volver a intentar?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarSolicitudPendienteLocal(regEmail);
+                    setErrorMsg("");
+                    setSuccessMsg("Se reinició el registro local. Ya puedes presionar 'Enviar Solicitud de Registro' nuevamente.");
+                  }}
+                  className="text-[11px] font-bold text-red-800 hover:text-red-950 underline"
+                >
+                  Reiniciar solicitud local
+                </button>
+              </div>
+            )}
           </div>
         )}
 

@@ -6,6 +6,7 @@ import {
   UsuarioSistema,
   RolUsuario,
   EstadoUsuario,
+  DatosBancariosUsuario,
 } from "@/types/estudio";
 
 const LOCAL_STORAGE_KEY = "gestionrh_estudios_v1";
@@ -13,10 +14,11 @@ const SUPABASE_CONFIG_KEY = "gestionrh_supabase_config_v1";
 const EVALUADORES_KEY = "gestionrh_evaluadores_catalog_v1";
 const USUARIOS_KEY = "gestionrh_usuarios_sistema_v1";
 const SESION_KEY = "gestionrh_usuario_activo_v1";
+const PERFIL_META_PREFIX = "__PERFIL_META__:";
 export const BUCKET_EXPEDIENTES = "expedientes";
 
 export const ADMIN_DEFAULT: UsuarioSistema = {
-  id: "admin-gaby-rodriguez",
+  id: "45e20dd7-da2a-40aa-8643-86bc72ff141c",
   nombre: "Gaby Rodriguez",
   email: "seleccion@gestionrh.com.mx",
   password: "6327",
@@ -44,7 +46,9 @@ export function getCatalogoEvaluadores(): string[] {
             "lic. roberto sanchez",
           ];
           list = parsed.filter(
-            (p) => !mocks.includes(String(p).trim().toLowerCase())
+            (p) =>
+              !String(p).startsWith(PERFIL_META_PREFIX) &&
+              !mocks.includes(String(p).trim().toLowerCase())
           );
         }
       }
@@ -101,11 +105,17 @@ export async function cargarCatalogoEvaluadoresSupabase(): Promise<string[]> {
   try {
     let remotos: string[] = [];
 
-    // 1. Cargar desde tabla de evaluadores
+    // 1. Cargar desde tabla de evaluadores (excluyendo metadatos de perfil)
     const { data, error } = await supabase.from("evaluadores").select("nombre");
     if (!error && data) {
       data.forEach((row: { nombre: string }) => {
-        if (row.nombre && row.nombre.trim()) remotos.push(row.nombre.trim());
+        if (
+          row.nombre &&
+          row.nombre.trim() &&
+          !row.nombre.startsWith(PERFIL_META_PREFIX)
+        ) {
+          remotos.push(row.nombre.trim());
+        }
       });
     }
 
@@ -672,35 +682,124 @@ export function setUsuariosLocales(users: UsuarioSistema[]): void {
   }
 }
 
+interface MetaPerfilPayload {
+  userId: string;
+  email: string;
+  datosBancarios?: DatosBancariosUsuario;
+  zonas?: string[];
+}
+
+async function guardarMetaPerfilEnSupabase(usuario: UsuarioSistema): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+  try {
+    const payload: MetaPerfilPayload = {
+      userId: usuario.id,
+      email: usuario.email.toLowerCase(),
+      datosBancarios: usuario.datosBancarios || {
+        banco: "",
+        numeroTarjeta: "",
+        clabe: "",
+      },
+      zonas: usuario.zonas || [],
+    };
+    const encoded = `${PERFIL_META_PREFIX}${usuario.id}:${JSON.stringify(payload)}`;
+    await supabase
+      .from("evaluadores")
+      .delete()
+      .like("nombre", `${PERFIL_META_PREFIX}${usuario.id}:%`);
+    await supabase.from("evaluadores").insert({ nombre: encoded });
+  } catch (err) {
+    console.warn("Aviso al guardar metadatos de perfil en Supabase:", err);
+  }
+}
+
+async function cargarMetaPerfilesDesdeSupabase(): Promise<{
+  byId: Record<string, MetaPerfilPayload>;
+  byEmail: Record<string, MetaPerfilPayload>;
+}> {
+  const byId: Record<string, MetaPerfilPayload> = {};
+  const byEmail: Record<string, MetaPerfilPayload> = {};
+  const supabase = getSupabaseClient();
+  if (!supabase) return { byId, byEmail };
+
+  try {
+    const { data } = await supabase
+      .from("evaluadores")
+      .select("nombre")
+      .like("nombre", `${PERFIL_META_PREFIX}%`);
+
+    if (data) {
+      data.forEach((row: { nombre: string }) => {
+        try {
+          const withoutPrefix = row.nombre.slice(PERFIL_META_PREFIX.length);
+          const colonIdx = withoutPrefix.indexOf(":");
+          if (colonIdx !== -1) {
+            const jsonStr = withoutPrefix.slice(colonIdx + 1);
+            const parsed = JSON.parse(jsonStr) as MetaPerfilPayload;
+            if (parsed.userId) byId[parsed.userId] = parsed;
+            if (parsed.email) byEmail[parsed.email.toLowerCase()] = parsed;
+          }
+        } catch {
+          // ignore malformed
+        }
+      });
+    }
+  } catch {
+    // ignore
+  }
+  return { byId, byEmail };
+}
+
 export async function cargarUsuariosSistema(): Promise<UsuarioSistema[]> {
   const local = getUsuariosLocales();
   const supabase = getSupabaseClient();
   if (!supabase) return local;
 
   try {
-    const { data, error } = await supabase
-      .from("usuarios_sistema")
-      .select("id, nombre, email, password, rol, estado, created_at, updated_at");
+    const [{ data, error }, metaMap] = await Promise.all([
+      supabase
+        .from("usuarios_sistema")
+        .select("id, nombre, email, password, rol, estado, created_at, updated_at"),
+      cargarMetaPerfilesDesdeSupabase(),
+    ]);
 
     if (error) {
       return local;
     }
 
     if (data && data.length > 0) {
-      const remotos: UsuarioSistema[] = data.map((row) => ({
-        id: row.id,
-        nombre: row.nombre,
-        email: row.email,
-        password: row.password,
-        rol: (row.rol || "evaluador") as RolUsuario,
-        estado: (row.estado || "pendiente") as EstadoUsuario,
-        createdAt: row.created_at || new Date().toISOString(),
-        updatedAt: row.updated_at,
-      }));
+      const remotos: UsuarioSistema[] = data.map((row) => {
+        const localMatch = local.find(
+          (l) =>
+            l.id === row.id ||
+            l.email.toLowerCase() === String(row.email || "").toLowerCase()
+        );
+        const meta =
+          metaMap.byId[row.id] ||
+          metaMap.byEmail[String(row.email || "").toLowerCase()];
+
+        return {
+          id: row.id,
+          nombre: row.nombre,
+          email: row.email,
+          password: row.password,
+          rol: (row.rol || "evaluador") as RolUsuario,
+          estado: (row.estado || "pendiente") as EstadoUsuario,
+          createdAt: row.created_at || new Date().toISOString(),
+          updatedAt: row.updated_at,
+          datosBancarios: meta?.datosBancarios || localMatch?.datosBancarios || {
+            banco: "",
+            numeroTarjeta: "",
+            clabe: "",
+          },
+          zonas: meta?.zonas || localMatch?.zonas || [],
+        };
+      });
 
       // Combinar asegurando que el admin principal siempre esté presente
       const combinados = [...remotos];
-      if (!combinados.some((u) => u.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase())) {
+      if (!combinados.some((u) => u.rol === "admin" || u.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase())) {
         combinados.unshift(ADMIN_DEFAULT);
         supabase.from("usuarios_sistema").upsert({
           id: ADMIN_DEFAULT.id,
@@ -712,7 +811,46 @@ export async function cargarUsuariosSistema(): Promise<UsuarioSistema[]> {
         }).then(() => {});
       }
 
+      // Auto-sincronizar solicitudes creadas localmente en este dispositivo que aún no estén en Supabase
+      const localesNoSincronizados = local.filter(
+        (loc) =>
+          loc.email.toLowerCase() !== ADMIN_DEFAULT.email.toLowerCase() &&
+          !combinados.some((rem) => rem.email.toLowerCase() === loc.email.toLowerCase())
+      );
+      for (const missing of localesNoSincronizados) {
+        try {
+          await supabase.from("usuarios_sistema").insert({
+            id: missing.id,
+            nombre: missing.nombre,
+            email: missing.email,
+            password: missing.password,
+            rol: missing.rol,
+            estado: missing.estado,
+          });
+          if (missing.datosBancarios || (missing.zonas && missing.zonas.length > 0)) {
+            await guardarMetaPerfilEnSupabase(missing);
+          }
+          combinados.push(missing);
+        } catch {
+          // ignore
+        }
+      }
+
       setUsuariosLocales(combinados);
+
+      // Si el usuario con sesión activa está en la lista, sincronizar sus datos en sesión
+      const activoActual = getUsuarioActivo();
+      if (activoActual) {
+        const actualizadoActivo = combinados.find(
+          (u) =>
+            u.id === activoActual.id ||
+            u.email.toLowerCase() === activoActual.email.toLowerCase()
+        );
+        if (actualizadoActivo) {
+          setUsuarioActivo(actualizadoActivo);
+        }
+      }
+
       return combinados;
     } else {
       // Si la tabla remota existe pero está vacía, sembrar la cuenta de Gaby
@@ -724,11 +862,133 @@ export async function cargarUsuariosSistema(): Promise<UsuarioSistema[]> {
         rol: ADMIN_DEFAULT.rol,
         estado: ADMIN_DEFAULT.estado,
       });
+
+      // Sincronizar usuarios locales a la tabla remota recién inicializada
+      const localesNoSincronizados = local.filter(
+        (loc) => loc.email.toLowerCase() !== ADMIN_DEFAULT.email.toLowerCase()
+      );
+      for (const missing of localesNoSincronizados) {
+        try {
+          await supabase.from("usuarios_sistema").insert({
+            id: missing.id,
+            nombre: missing.nombre,
+            email: missing.email,
+            password: missing.password,
+            rol: missing.rol,
+            estado: missing.estado,
+          });
+        } catch {
+          // ignore
+        }
+      }
+
       return local;
     }
   } catch {
     return local;
   }
+}
+
+export async function verificarEstadoTablaUsuarios(): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { ok: false, error: "Supabase no está configurado." };
+  try {
+    const { error } = await supabase.from("usuarios_sistema").select("id").limit(1);
+    if (error) {
+      return {
+        ok: false,
+        error: error.message || error.code || "Tabla public.usuarios_sistema no encontrada",
+      };
+    }
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Error al conectar con Supabase";
+    return { ok: false, error: msg };
+  }
+}
+
+export function limpiarSolicitudPendienteLocal(email?: string): void {
+  const local = getUsuariosLocales();
+  if (!email) {
+    setUsuariosLocales([ADMIN_DEFAULT]);
+    return;
+  }
+  const filtrados = local.filter(
+    (u) =>
+      u.email.toLowerCase() !== email.toLowerCase() ||
+      u.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase()
+  );
+  setUsuariosLocales(filtrados);
+}
+
+export async function crearUsuarioManualPorAdmin(
+  nombre: string,
+  email: string,
+  password: string,
+  rol: RolUsuario = "evaluador",
+  estado: EstadoUsuario = "activo"
+): Promise<{ success: boolean; message: string; usuario?: UsuarioSistema }> {
+  const limpioNombre = nombre.trim();
+  const limpioEmail = email.trim().toLowerCase();
+  const limpioPass = password.trim();
+
+  if (!limpioNombre || !limpioEmail || !limpioPass) {
+    return { success: false, message: "Todos los campos son obligatorios." };
+  }
+
+  const usuarios = await cargarUsuariosSistema();
+  const existente = usuarios.find((u) => u.email.toLowerCase() === limpioEmail);
+
+  if (existente) {
+    const res = await actualizarEstadoUsuarioSistema(existente.id, estado, rol);
+    if (res.success) {
+      return {
+        success: true,
+        message: `El usuario "${limpioNombre}" ya existía y fue actualizado a estado ${estado.toUpperCase()}.`,
+      };
+    }
+    return { success: false, message: res.error || "Error al actualizar usuario existente." };
+  }
+
+  const nuevoUsuario: UsuarioSistema = {
+    id: generateUUID(),
+    nombre: limpioNombre,
+    email: limpioEmail,
+    password: limpioPass,
+    rol,
+    estado,
+    createdAt: new Date().toISOString(),
+  };
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { error: insertError } = await supabase.from("usuarios_sistema").insert({
+        id: nuevoUsuario.id,
+        nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email,
+        password: nuevoUsuario.password,
+        rol: nuevoUsuario.rol,
+        estado: nuevoUsuario.estado,
+      });
+      if (insertError) {
+        return { success: false, message: `Error en Supabase: ${insertError.message}` };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error de conexión con Supabase";
+      return { success: false, message: msg };
+    }
+  }
+
+  const listaActualizada = [...usuarios, nuevoUsuario];
+  setUsuariosLocales(listaActualizada);
+  guardarEvaluadorEnSupabase(limpioNombre);
+
+  return {
+    success: true,
+    message: `Evaluador "${limpioNombre}" registrado con éxito. Estado: ${estado.toUpperCase()}.`,
+    usuario: nuevoUsuario,
+  };
 }
 
 export async function registrarUsuarioSistema(
@@ -774,14 +1034,11 @@ export async function registrarUsuarioSistema(
     createdAt: new Date().toISOString(),
   };
 
-  const listaActualizada = [...usuarios, nuevoUsuario];
-  setUsuariosLocales(listaActualizada);
-
   // Guardar en Supabase si está disponible
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      await supabase.from("usuarios_sistema").insert({
+      const { error: insertError } = await supabase.from("usuarios_sistema").insert({
         id: nuevoUsuario.id,
         nombre: nuevoUsuario.nombre,
         email: nuevoUsuario.email,
@@ -789,10 +1046,31 @@ export async function registrarUsuarioSistema(
         rol: nuevoUsuario.rol,
         estado: nuevoUsuario.estado,
       });
+
+      if (insertError) {
+        console.error("Error al registrar en Supabase:", insertError);
+        if (insertError.code === "PGRST205" || insertError.message?.includes("usuarios_sistema")) {
+          return {
+            success: false,
+            message: "La base de datos central en Supabase aún no tiene la tabla de usuarios creada. Pide a la administración que ejecute el script SQL en Supabase para habilitar registros.",
+          };
+        }
+        return {
+          success: false,
+          message: `No se pudo enviar la solicitud al servidor (${insertError.message || insertError.code}). Por favor intenta de nuevo.`,
+        };
+      }
     } catch (err) {
       console.warn("Aviso: no se pudo sincronizar usuario en Supabase inmediatamente:", err);
+      return {
+        success: false,
+        message: "No se pudo conectar con el servidor central para enviar tu solicitud. Verifica tu conexión a internet.",
+      };
     }
   }
+
+  const listaActualizada = [...usuarios, nuevoUsuario];
+  setUsuariosLocales(listaActualizada);
 
   // Registrar también en el catálogo de evaluadores
   guardarEvaluadorEnSupabase(limpioNombre);
@@ -813,7 +1091,35 @@ export async function iniciarSesionSistema(
   const limpioEmail = email.trim().toLowerCase();
   const limpioPass = password.trim();
 
-  // Acceso de emergencia o directo garantizado para Gaby Rodriguez
+  const usuarios = await cargarUsuariosSistema();
+  const usuario = usuarios.find((u) => u.email.toLowerCase() === limpioEmail);
+
+  if (usuario) {
+    if (usuario.password !== limpioPass) {
+      return { success: false, message: "Correo o contraseña incorrectos." };
+    }
+
+    if (usuario.estado === "pendiente") {
+      return {
+        success: false,
+        message:
+          "Tu solicitud de registro está pendiente de aprobación por la administradora (Gaby Rodriguez). Te notificaremos cuando tu acceso sea autorizado.",
+      };
+    }
+
+    if (usuario.estado === "rechazado") {
+      return {
+        success: false,
+        message:
+          "Tu solicitud de acceso fue rechazada por la administración. Comunícate a seleccion@gestionrh.com.mx para mayor información.",
+      };
+    }
+
+    setUsuarioActivo(usuario);
+    return { success: true, message: `Bienvenido(a), ${usuario.nombre}`, usuario };
+  }
+
+  // Acceso de emergencia o respaldo para Gaby Rodriguez si no estuviera en la tabla
   if (
     limpioEmail === ADMIN_DEFAULT.email.toLowerCase() &&
     limpioPass === ADMIN_DEFAULT.password
@@ -822,36 +1128,158 @@ export async function iniciarSesionSistema(
     return { success: true, message: "Bienvenida Gaby Rodriguez", usuario: ADMIN_DEFAULT };
   }
 
+  return { success: false, message: "Correo o contraseña incorrectos." };
+}
+
+export interface ActualizarPerfilInput {
+  id: string;
+  nombre: string;
+  email: string;
+  password?: string;
+  datosBancarios: DatosBancariosUsuario;
+  zonas: string[];
+}
+
+export async function actualizarPerfilUsuarioSistema(
+  input: ActualizarPerfilInput
+): Promise<{ success: boolean; message: string; usuario?: UsuarioSistema }> {
+  const limpioNombre = input.nombre.trim();
+  const limpioEmail = input.email.trim().toLowerCase();
+  const limpioPass = input.password ? input.password.trim() : "";
+
+  if (!limpioNombre || !limpioEmail) {
+    return {
+      success: false,
+      message: "El nombre de usuario y el correo electrónico son obligatorios.",
+    };
+  }
+
   const usuarios = await cargarUsuariosSistema();
-  const usuario = usuarios.find((u) => u.email.toLowerCase() === limpioEmail);
-
-  if (!usuario) {
-    return { success: false, message: "Correo o contraseña incorrectos." };
+  let idx = usuarios.findIndex((u) => u.id === input.id);
+  if (idx === -1) {
+    // Fallback por correo o si era la sesión anterior de admin
+    const activo = getUsuarioActivo();
+    if (activo) {
+      idx = usuarios.findIndex(
+        (u) => u.email.toLowerCase() === activo.email.toLowerCase()
+      );
+    }
+  }
+  if (idx === -1) {
+    return { success: false, message: "No se encontró el usuario para actualizar." };
   }
 
-  if (usuario.password !== limpioPass) {
-    return { success: false, message: "Correo o contraseña incorrectos." };
-  }
+  const usuarioAnterior = usuarios[idx];
 
-  if (usuario.estado === "pendiente") {
+  // Verificar que el nuevo correo no pertenezca a otro usuario distinto
+  const duplicado = usuarios.find(
+    (u, i) => i !== idx && u.email.toLowerCase() === limpioEmail
+  );
+  if (duplicado) {
     return {
       success: false,
-      message:
-        "Tu solicitud de registro está pendiente de aprobación por la administradora (Gaby Rodriguez). Te notificaremos cuando tu acceso sea autorizado.",
+      message: "Este correo electrónico ya está registrado por otro usuario.",
     };
   }
 
-  if (usuario.estado === "rechazado") {
-    return {
-      success: false,
-      message:
-        "Tu solicitud de acceso fue rechazada por la administración. Comunícate a seleccion@gestionrh.com.mx para mayor información.",
-    };
+  const zonasLimpias = Array.from(
+    new Set((input.zonas || []).map((z) => z.trim()).filter(Boolean))
+  );
+
+  const datosBancariosLimpios: DatosBancariosUsuario = {
+    banco: (input.datosBancarios?.banco || "").trim(),
+    numeroTarjeta: (input.datosBancarios?.numeroTarjeta || "").trim(),
+    clabe: (input.datosBancarios?.clabe || "").trim(),
+  };
+
+  const actualizado: UsuarioSistema = {
+    ...usuarioAnterior,
+    nombre: limpioNombre,
+    email: limpioEmail,
+    password: limpioPass ? limpioPass : usuarioAnterior.password,
+    datosBancarios: datosBancariosLimpios,
+    zonas: zonasLimpias,
+    updatedAt: new Date().toISOString(),
+  };
+
+  usuarios[idx] = actualizado;
+  setUsuariosLocales(usuarios);
+
+  // Si es el usuario con sesión activa en este navegador, actualizar sesión inmediatamente
+  const activoActual = getUsuarioActivo();
+  if (
+    activoActual &&
+    (activoActual.id === usuarioAnterior.id ||
+      activoActual.email.toLowerCase() === usuarioAnterior.email.toLowerCase())
+  ) {
+    setUsuarioActivo(actualizado);
   }
 
-  // Usuario activo y autorizado
-  setUsuarioActivo(usuario);
-  return { success: true, message: `Bienvenido(a), ${usuario.nombre}`, usuario };
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { error: updateErr } = await supabase
+        .from("usuarios_sistema")
+        .update({
+          nombre: actualizado.nombre,
+          email: actualizado.email,
+          ...(limpioPass ? { password: actualizado.password } : {}),
+          updated_at: actualizado.updatedAt,
+        })
+        .eq("id", actualizado.id);
+
+      if (updateErr) {
+        return {
+          success: false,
+          message: `Error al actualizar en Supabase: ${updateErr.message}`,
+        };
+      }
+
+      // Guardar datos bancarios y zonas en la tabla sincronizada en la nube
+      await guardarMetaPerfilEnSupabase(actualizado);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al guardar en la nube";
+      return { success: false, message: msg };
+    }
+  }
+
+  // Si cambió su nombre, registrar el nuevo nombre en el catálogo y actualizar sus estudios previos
+  const nombrePrevio = usuarioAnterior.nombre.trim();
+  if (nombrePrevio.toLowerCase() !== limpioNombre.toLowerCase()) {
+    guardarEvaluadorEnSupabase(limpioNombre);
+    try {
+      const estudiosLocales = getLocalEstudios();
+      let huboCambios = false;
+      for (const est of estudiosLocales) {
+        if ((est.evaluadorNombre || "").trim().toLowerCase() === nombrePrevio.toLowerCase()) {
+          est.evaluadorNombre = limpioNombre;
+          huboCambios = true;
+          if (supabase) {
+            supabase
+              .from("estudios_socioeconomicos")
+              .update({
+                data: est,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", est.id)
+              .then(() => {});
+          }
+        }
+      }
+      if (huboCambios) {
+        setLocalEstudios(estudiosLocales);
+        invalidarCacheLectura();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    success: true,
+    message: "Perfil, datos bancarios y zonas actualizados correctamente.",
+    usuario: actualizado,
+  };
 }
 
 export async function actualizarEstadoUsuarioSistema(
@@ -899,7 +1327,7 @@ export async function eliminarUsuarioSistema(
   const target = usuarios.find((u) => u.id === id);
   if (!target) return { success: false, error: "Usuario no encontrado" };
 
-  if (target.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase()) {
+  if (target.rol === "admin" && target.email.toLowerCase() === ADMIN_DEFAULT.email.toLowerCase()) {
     return {
       success: false,
       error: "No se puede eliminar la cuenta principal de administración.",
@@ -913,6 +1341,10 @@ export async function eliminarUsuarioSistema(
   if (supabase) {
     try {
       await supabase.from("usuarios_sistema").delete().eq("id", id);
+      await supabase
+        .from("evaluadores")
+        .delete()
+        .like("nombre", `${PERFIL_META_PREFIX}${id}:%`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al eliminar usuario";
       return { success: false, error: msg };
@@ -937,6 +1369,17 @@ export function suscribirUsuariosRealtime(
           event: "*",
           schema: "public",
           table: "usuarios_sistema",
+        },
+        () => {
+          onCambio();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "evaluadores",
         },
         () => {
           onCambio();

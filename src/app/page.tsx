@@ -25,6 +25,7 @@ import {
 } from "@/lib/storage";
 import { LogoGestionRH } from "@/components/pdf/BrandGraphics";
 import { AuthLoginView } from "@/components/auth/AuthLoginView";
+import { EditarPerfilModal } from "@/components/auth/EditarPerfilModal";
 import { GestionUsuariosModal } from "@/components/admin/GestionUsuariosModal";
 import dynamic from "next/dynamic";
 
@@ -104,6 +105,7 @@ export default function HomePage() {
   const [usuarioActual, setUsuarioActual] = useState<UsuarioSistema | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isGestionUsuariosOpen, setIsGestionUsuariosOpen] = useState(false);
+  const [isEditarPerfilOpen, setIsEditarPerfilOpen] = useState(false);
   const [usuariosPendientesCount, setUsuariosPendientesCount] = useState(0);
 
   const actualizarConteoPendientes = useCallback(async () => {
@@ -627,7 +629,12 @@ export default function HomePage() {
                   </button>
                 )}
 
-                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-2.5 py-1.5 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setIsEditarPerfilOpen(true)}
+                  className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 px-2.5 py-1.5 rounded-xl transition cursor-pointer group"
+                  title="Editar mi perfil, datos bancarios y zonas"
+                >
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                       esAdmin
@@ -638,14 +645,15 @@ export default function HomePage() {
                     {esAdmin ? "G" : (usuarioActual.nombre.charAt(0) || "U").toUpperCase()}
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-bold text-gray-800 leading-tight truncate max-w-[100px] sm:max-w-[150px]">
+                    <span className="text-xs font-bold text-gray-800 group-hover:text-[#E31E24] transition leading-tight truncate max-w-[100px] sm:max-w-[150px]">
                       {usuarioActual.nombre}
                     </span>
-                    <span className="text-[9px] text-gray-400 font-semibold leading-none">
-                      {esAdmin ? "Administradora" : "Evaluador"}
+                    <span className="text-[9px] text-gray-500 font-semibold leading-none flex items-center gap-1">
+                      <span>{esAdmin ? "Administradora" : "Evaluador"}</span>
+                      <span className="text-blue-600 font-bold">· Editar Perfil</span>
                     </span>
                   </div>
-                </div>
+                </button>
 
                 <button
                   type="button"
@@ -1176,6 +1184,26 @@ export default function HomePage() {
           isOpen={isGestionUsuariosOpen}
           onClose={() => setIsGestionUsuariosOpen(false)}
           onUsuariosUpdated={actualizarConteoPendientes}
+        />
+      )}
+
+      {/* Modal de Edición de Perfil Propio (Nombre, Correo, Contraseña, Datos Bancarios y Zonas) */}
+      {usuarioActual && (
+        <EditarPerfilModal
+          isOpen={isEditarPerfilOpen}
+          onClose={() => setIsEditarPerfilOpen(false)}
+          usuario={usuarioActual}
+          onPerfilActualizado={(actualizado) => {
+            setUsuarioActual(actualizado);
+            setMiNombreEvaluador(actualizado.nombre);
+            if (selectedEstudio && !esAdmin) {
+              setSelectedEstudio({
+                ...selectedEstudio,
+                evaluadorNombre: actualizado.nombre,
+              });
+            }
+            cargarDatos();
+          }}
         />
       )}
     </div>
