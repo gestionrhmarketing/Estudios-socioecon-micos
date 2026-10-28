@@ -1,5 +1,5 @@
 -- ============================================================================
--- ESQUEMA SUPABASE PARA APP DE ESTUDIOS SOCIOECONÓMICOS (GESTIÓN RH) v1.1.1
+-- ESQUEMA SUPABASE PARA APP DE ESTUDIOS SOCIOECONÓMICOS (GESTIÓN RH) v1.1.3
 -- Ejecuta este script en el SQL Editor de tu proyecto en https://supabase.com
 -- ============================================================================
 
@@ -77,9 +77,19 @@ create table if not exists public.usuarios_sistema (
   password text not null,
   rol text not null default 'evaluador', -- 'admin' | 'evaluador'
   estado text not null default 'pendiente', -- 'activo' | 'pendiente' | 'rechazado'
+  banco text not null default '',
+  numero_tarjeta text not null default '',
+  clabe text not null default '',
+  zonas jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Asegurar columnas de datos bancarios y zonas si la tabla ya existía previamente
+alter table public.usuarios_sistema add column if not exists banco text not null default '';
+alter table public.usuarios_sistema add column if not exists numero_tarjeta text not null default '';
+alter table public.usuarios_sistema add column if not exists clabe text not null default '';
+alter table public.usuarios_sistema add column if not exists zonas jsonb not null default '[]'::jsonb;
 
 -- Cuenta administradora principal por defecto (Gaby Rodriguez)
 insert into public.usuarios_sistema (nombre, email, password, rol, estado)

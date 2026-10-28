@@ -758,9 +758,7 @@ export async function cargarUsuariosSistema(): Promise<UsuarioSistema[]> {
 
   try {
     const [{ data, error }, metaMap] = await Promise.all([
-      supabase
-        .from("usuarios_sistema")
-        .select("id, nombre, email, password, rol, estado, created_at, updated_at"),
+      supabase.from("usuarios_sistema").select("*"),
       cargarMetaPerfilesDesdeSupabase(),
     ]);
 
@@ -769,31 +767,52 @@ export async function cargarUsuariosSistema(): Promise<UsuarioSistema[]> {
     }
 
     if (data && data.length > 0) {
-      const remotos: UsuarioSistema[] = data.map((row) => {
+      const remotos: UsuarioSistema[] = data.map((row: Record<string, unknown>) => {
+        const rowId = String(row.id || "");
+        const rowEmail = String(row.email || "");
         const localMatch = local.find(
           (l) =>
-            l.id === row.id ||
-            l.email.toLowerCase() === String(row.email || "").toLowerCase()
+            l.id === rowId ||
+            l.email.toLowerCase() === rowEmail.toLowerCase()
         );
         const meta =
-          metaMap.byId[row.id] ||
-          metaMap.byEmail[String(row.email || "").toLowerCase()];
+          metaMap.byId[rowId] ||
+          metaMap.byEmail[rowEmail.toLowerCase()];
+
+        const bancoCol = typeof row.banco === "string" ? row.banco : "";
+        const tarjetaCol = typeof row.numero_tarjeta === "string" ? row.numero_tarjeta : "";
+        const clabeCol = typeof row.clabe === "string" ? row.clabe : "";
+        const tieneColumnasBanco = Boolean(bancoCol || tarjetaCol || clabeCol);
+
+        const zonasCol = Array.isArray(row.zonas)
+          ? (row.zonas as string[])
+          : null;
 
         return {
-          id: row.id,
-          nombre: row.nombre,
-          email: row.email,
-          password: row.password,
+          id: rowId,
+          nombre: String(row.nombre || ""),
+          email: rowEmail,
+          password: typeof row.password === "string" ? row.password : undefined,
           rol: (row.rol || "evaluador") as RolUsuario,
           estado: (row.estado || "pendiente") as EstadoUsuario,
-          createdAt: row.created_at || new Date().toISOString(),
-          updatedAt: row.updated_at,
-          datosBancarios: meta?.datosBancarios || localMatch?.datosBancarios || {
-            banco: "",
-            numeroTarjeta: "",
-            clabe: "",
-          },
-          zonas: meta?.zonas || localMatch?.zonas || [],
+          createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+          updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+          datosBancarios: tieneColumnasBanco
+            ? {
+                banco: bancoCol,
+                numeroTarjeta: tarjetaCol,
+                clabe: clabeCol,
+              }
+            : meta?.datosBancarios ||
+              localMatch?.datosBancarios || {
+                banco: "",
+                numeroTarjeta: "",
+                clabe: "",
+              },
+          zonas:
+            zonasCol && zonasCol.length > 0
+              ? zonasCol
+              : meta?.zonas || localMatch?.zonas || [],
         };
       });
 
@@ -1218,24 +1237,42 @@ export async function actualizarPerfilUsuarioSistema(
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { error: updateErr } = await supabase
+      // 1. Intentar guardar directamente en columnas dedicadas de usuarios_sistema
+      const { error: fullUpdateErr } = await supabase
         .from("usuarios_sistema")
         .update({
           nombre: actualizado.nombre,
           email: actualizado.email,
           ...(limpioPass ? { password: actualizado.password } : {}),
+          banco: datosBancariosLimpios.banco,
+          numero_tarjeta: datosBancariosLimpios.numeroTarjeta,
+          clabe: datosBancariosLimpios.clabe,
+          zonas: zonasLimpias,
           updated_at: actualizado.updatedAt,
         })
         .eq("id", actualizado.id);
 
-      if (updateErr) {
-        return {
-          success: false,
-          message: `Error al actualizar en Supabase: ${updateErr.message}`,
-        };
+      if (fullUpdateErr) {
+        // Si las columnas banco/clabe/zonas aún no existen en la tabla, guardar columnas base
+        const { error: baseUpdateErr } = await supabase
+          .from("usuarios_sistema")
+          .update({
+            nombre: actualizado.nombre,
+            email: actualizado.email,
+            ...(limpioPass ? { password: actualizado.password } : {}),
+            updated_at: actualizado.updatedAt,
+          })
+          .eq("id", actualizado.id);
+
+        if (baseUpdateErr) {
+          return {
+            success: false,
+            message: `Error al actualizar en Supabase: ${baseUpdateErr.message}`,
+          };
+        }
       }
 
-      // Guardar datos bancarios y zonas en la tabla sincronizada en la nube
+      // 2. Respaldo en tabla sincronizada para que funcione incluso sin correr ALTER TABLE
       await guardarMetaPerfilEnSupabase(actualizado);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al guardar en la nube";
