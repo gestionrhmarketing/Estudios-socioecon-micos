@@ -392,13 +392,13 @@ export function EstudioPDFView({ estudio }: { estudio: EstudioSocioeconomico }) 
           <div className="space-y-1.5 text-[11.5px] mb-3">
             <div className="flex items-end gap-2">
               <span>Metepec, Estado de México a</span>
-              <span className="border-b border-gray-600 min-w-[230px] px-2 font-semibold">
+              <span className="border-b border-gray-600 min-w-[230px] px-2 font-semibold text-center">
                 {estudio.fechaElaboracion}
               </span>
             </div>
             <div className="flex items-end gap-2">
               <span>Folio:</span>
-              <span className="border-b border-gray-600 min-w-[280px] px-2 font-bold text-[#E31E24]">
+              <span className="border-b border-gray-600 min-w-[280px] px-2 font-bold text-[#E31E24] text-center">
                 {estudio.folio}
               </span>
             </div>
@@ -411,7 +411,7 @@ export function EstudioPDFView({ estudio }: { estudio: EstudioSocioeconomico }) 
               socioeconómico del
             </p>
             <div className="flex items-baseline flex-wrap gap-1 my-1">
-              <span className="border-b border-gray-700 min-w-[290px] px-2 font-bold text-black">
+              <span className="border-b border-gray-700 min-w-[290px] px-2 font-bold text-black text-center">
                 {(() => {
                   const raw = (
                     estudio.candidatoNombrePortada ||
@@ -423,14 +423,21 @@ export function EstudioPDFView({ estudio }: { estudio: EstudioSocioeconomico }) 
                 })()}
               </span>
               <span>Llevado a cabo el día:</span>
-              <span className="border-b border-gray-700 min-w-[160px] px-2 font-semibold">
-                {estudio.fechaRealizacion}
+              <span className="border-b border-gray-700 min-w-[160px] px-2 font-semibold text-center">
+                {(() => {
+                  const f = (estudio.fechaRealizacion || "").trim();
+                  const mIso = f.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+                  if (mIso) return `${mIso[3]} - ${mIso[2]} - ${mIso[1]}`;
+                  const mDmy = f.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+                  if (mDmy) return `${mDmy[1]} - ${mDmy[2]} - ${mDmy[3]}`;
+                  return f;
+                })()}
               </span>
               <span>, para el</span>
             </div>
             <div className="flex items-baseline flex-wrap gap-1 my-1">
               <span>puesto:</span>
-              <span className="border-b border-gray-700 min-w-[310px] px-2 font-bold text-black">
+              <span className="border-b border-gray-700 min-w-[310px] px-2 font-bold text-black text-center">
                 {estudio.puestoSolicitado}
               </span>
               <span>, de acuerdo a los detalles de la investigación</span>

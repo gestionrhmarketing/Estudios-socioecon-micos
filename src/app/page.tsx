@@ -953,7 +953,14 @@ export default function HomePage() {
                               {est.puestoSolicitado || "—"}
                             </td>
                             <td className="py-3.5 px-4 text-xs text-gray-600 whitespace-nowrap">
-                              {est.fechaRealizacion || est.fechaElaboracion}
+                              {(() => {
+                                const f = (est.fechaRealizacion || est.fechaElaboracion || "").trim();
+                                const mIso = f.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+                                if (mIso) return `${mIso[3]} - ${mIso[2]} - ${mIso[1]}`;
+                                const mDmy = f.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+                                if (mDmy) return `${mDmy[1]} - ${mDmy[2]} - ${mDmy[3]}`;
+                                return f;
+                              })()}
                             </td>
                             <td className="py-3.5 px-4 text-center whitespace-nowrap">
                               <span
